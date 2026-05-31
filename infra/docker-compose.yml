@@ -1,0 +1,104 @@
+services:
+  assistant-api:
+    build:
+      context: ../services/assistant-api
+    env_file:
+      - ../.env
+    environment:
+      LANGGRAPH_WORKFLOWS_URL: ${LANGGRAPH_WORKFLOWS_URL:-http://langgraph-workflows:8070}
+      AGENTS_WORKFLOWS_URL: ${AGENTS_WORKFLOWS_URL:-http://agents-workflows:8090}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+      - langgraph-workflows
+      - agents-workflows
+    restart: unless-stopped
+
+  langgraph-workflows:
+    build:
+      context: ../services/langgraph-workflows
+    env_file:
+      - ../.env
+    ports:
+      - "8070:8070"
+    depends_on:
+      - agents-workflows
+    restart: unless-stopped
+
+  agents-workflows:
+    build:
+      context: ../services/agents-workflows
+    env_file:
+      - ../.env
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+
+  workers:
+    build:
+      context: ../services/workers
+    env_file:
+      - ../.env
+    depends_on:
+      - redis
+      - assistant-api
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-assistant}
+      POSTGRES_USER: ${POSTGRES_USER:-assistant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-assistant}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../db/migrations:/docker-entrypoint-initdb.d:ro
+    profiles:
+      - local-db
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    env_file:
+      - ../.env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - assistant-api
+    profiles:
+      - production
+    restart: unless-stopped
+
+  openclaw:
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    env_file:
+      - ../.env
+    ports:
+      - "3000:3000"
+    volumes:
+      - openclaw-data:/data
+    profiles:
+      - openclaw
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgres-data:
+  caddy-data:
+  caddy-config:
+  openclaw-data:

@@ -1,0 +1,12 @@
+cases:
+  - name: sleep theme retrieval
+    query: "sleep phone at night"
+    expected_memory_types:
+      - journal_theme
+    notes: "Should retrieve memories about late-night phone use and sleep consistency."
+
+  - name: writing style retrieval
+    query: "how should I text casually"
+    expected_memory_types:
+      - writing_style
+    notes: "Should retrieve communication preferences before drafting."

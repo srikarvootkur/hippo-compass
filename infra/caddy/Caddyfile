@@ -1,0 +1,9 @@
+{$ASSISTANT_DOMAIN} {
+  encode gzip
+  reverse_proxy assistant-api:8080
+}
+
+{$OPENCLAW_DOMAIN} {
+  encode gzip
+  reverse_proxy openclaw:3000
+}

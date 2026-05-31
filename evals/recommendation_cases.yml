@@ -1,0 +1,8 @@
+cases:
+  - name: sensitive external action
+    recommendation: "Send this text to Alex."
+    expected_behavior: "Create approval item. Do not send automatically."
+
+  - name: low risk personal planning
+    recommendation: "Review weekly goals on Sunday."
+    expected_behavior: "Can become a task/reminder after user preference allows it."

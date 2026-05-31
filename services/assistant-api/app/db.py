@@ -1,0 +1,139 @@
+import os
+import json
+from typing import Any
+
+import asyncpg
+
+
+async def create_pool() -> asyncpg.Pool | None:
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        return None
+    return await asyncpg.create_pool(database_url, min_size=1, max_size=5)
+
+
+async def insert_memory(pool: asyncpg.Pool, memory: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO memories (kind, content, source, metadata)
+        VALUES ($1, $2, $3, $4::jsonb)
+        RETURNING id, kind, content, source, metadata, created_at
+        """,
+        memory["kind"],
+        memory["content"],
+        memory["source"],
+        json.dumps(memory["metadata"]),
+    )
+    return dict(row)
+
+
+async def search_memories(
+    pool: asyncpg.Pool,
+    query: str,
+    limit: int,
+    filters: dict[str, Any],
+) -> list[dict[str, Any]]:
+    kind = filters.get("kind")
+    if kind:
+        rows = await pool.fetch(
+            """
+            SELECT id, kind, content, source, confidence, metadata, created_at
+            FROM memories
+            WHERE kind = $1 AND content ILIKE '%' || $2 || '%'
+            ORDER BY created_at DESC
+            LIMIT $3
+            """,
+            kind,
+            query,
+            limit,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT id, kind, content, source, confidence, metadata, created_at
+            FROM memories
+            WHERE content ILIKE '%' || $1 || '%'
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            query,
+            limit,
+        )
+    return [dict(row) for row in rows]
+
+
+async def insert_approval(pool: asyncpg.Pool, approval: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO approvals (action_type, title, proposed_payload, reason)
+        VALUES ($1, $2, $3::jsonb, $4)
+        RETURNING id, action_type, title, status, proposed_payload, reason, created_at
+        """,
+        approval["action_type"],
+        approval["title"],
+        json.dumps(approval["proposed_payload"]),
+        approval.get("reason"),
+    )
+    return dict(row)
+
+
+async def insert_journal_entry(pool: asyncpg.Pool, journal: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO journal_entries (entry_date, title, source, content, summary, occurred_at)
+        VALUES (COALESCE($1::date, current_date), $2, $3, $4, $5, COALESCE($6::timestamptz, now()))
+        RETURNING id, entry_date, title, source, content, summary, occurred_at, created_at
+        """,
+        journal.get("entry_date"),
+        journal.get("title"),
+        journal["source"],
+        journal["content"],
+        journal.get("summary"),
+        journal.get("occurred_at"),
+    )
+    return dict(row)
+
+
+async def insert_recommendation(pool: asyncpg.Pool, recommendation: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO recommendations (title, body, reason, metadata)
+        VALUES ($1, $2, $3, $4::jsonb)
+        RETURNING id, title, body, reason, status, metadata, created_at, updated_at
+        """,
+        recommendation["title"],
+        recommendation["body"],
+        recommendation.get("reason"),
+        json.dumps(recommendation["metadata"]),
+    )
+    return dict(row)
+
+
+async def list_recommendations(pool: asyncpg.Pool, status: str, limit: int) -> list[dict[str, Any]]:
+    rows = await pool.fetch(
+        """
+        SELECT id, title, body, reason, status, metadata, created_at, updated_at
+        FROM recommendations
+        WHERE status = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        """,
+        status,
+        limit,
+    )
+    return [dict(row) for row in rows]
+
+
+async def insert_tool_run(pool: asyncpg.Pool, tool_run: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO tool_runs (tool_name, input_json, output_json, status)
+        VALUES ($1, $2::jsonb, $3::jsonb, $4)
+        RETURNING id, tool_name, input_json, output_json, status, created_at
+        """,
+        tool_run["tool_name"],
+        json.dumps(tool_run.get("input_json") or {}),
+        json.dumps(tool_run.get("output_json") or {}),
+        tool_run["status"],
+    )
+    return dict(row)

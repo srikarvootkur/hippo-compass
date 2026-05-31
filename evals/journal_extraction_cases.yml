@@ -1,0 +1,13 @@
+cases:
+  - name: journal creates review recommendation
+    input: "I keep saying I want to sleep earlier, but I use my phone too late."
+    expected_outputs:
+      - memory candidate about sleep/phone pattern
+      - pending recommendation to review the theme
+
+  - name: journal avoids overclaiming
+    input: "I felt off today and skipped the gym."
+    expected_outputs:
+      - lightweight summary
+      - no diagnosis
+      - no automatic calendar/task action
