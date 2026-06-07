@@ -125,6 +125,22 @@ cp infra/env.example .env
 
 Do not commit GitHub tokens, SSH keys, `.env`, database URLs, or API keys.
 
+If `git pull` asks for a GitHub password, use a fine-grained token instead of your account password. GitHub no longer supports password authentication for git over HTTPS.
+
+If `git pull` says local files would be overwritten, check the changed files before pulling:
+
+```bash
+git status
+git diff
+```
+
+For local-only VPS changes that you do not need, stash them:
+
+```bash
+git stash push -m "local VPS changes before pull"
+git pull
+```
+
 ## 8. Configure Environment
 
 Generate an assistant API key:
@@ -157,6 +173,8 @@ OPENCLAW_DOMAIN=openclaw.yourdomain.com
 ```
 
 Save in nano with `Ctrl + O`, `Enter`, then `Ctrl + X`.
+
+In nano, undo is usually `Alt + U` on Linux terminals. If your keyboard sends the wrong key, press `Esc`, then `U`.
 
 ## 9. Start Backend Services
 
@@ -324,6 +342,46 @@ docker compose -f /opt/openclaw/docker-compose.yml restart openclaw-gateway
 ```
 
 The gateway runs on the VPS. Your Mac browser and SSH tunnel can be closed when you are not using the Control UI.
+
+If a command works on the VPS host but not inside the OpenClaw container, remember that the container has a different filesystem and network view:
+
+- host OpenClaw workspace: `/root/.openclaw/workspace`
+- container OpenClaw workspace: `/home/node/.openclaw/workspace`
+- host `localhost:8080`: Hippo Compass API on the VPS
+- container `localhost:8080`: inside the OpenClaw container, usually wrong
+- container API URL after shared network setup: `http://assistant-api:8080`
+
+Do not run host-level `docker compose` commands from inside the OpenClaw container unless you intentionally installed/mounted Docker there. Exit back to the VPS shell first.
+
+## 14. Google Health Connector
+
+After the backend is healthy, follow [google-health-connector.md](google-health-connector.md) to connect Google/Fitbit activity data.
+
+For no-DNS setup, keep an SSH tunnel open from your Mac:
+
+```bash
+ssh -L 8080:localhost:8080 root@YOUR_SERVER_IP
+```
+
+Then start OAuth from your Mac:
+
+```bash
+curl -H "X-Assistant-API-Key: YOUR_ASSISTANT_API_KEY" \
+  http://localhost:8080/connectors/google-health/oauth/start
+```
+
+After consent, verify and sync:
+
+```bash
+curl -H "X-Assistant-API-Key: YOUR_ASSISTANT_API_KEY" \
+  http://localhost:8080/connectors/google-health/status
+
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Assistant-API-Key: YOUR_ASSISTANT_API_KEY" \
+  -d '{"data_type":"exercise"}' \
+  http://localhost:8080/connectors/google-health/sync
+```
 
 ## Maintenance Commands
 

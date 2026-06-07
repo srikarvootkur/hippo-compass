@@ -292,7 +292,7 @@ async def google_health_sync(request: GoogleHealthSyncRequest) -> dict[str, Any]
                 "id": str(record["id"]),
                 "external_id": record["external_id"],
                 "occurred_at": record["occurred_at"].isoformat() if record["occurred_at"] else None,
-                "normalized_payload": record["normalized_payload"],
+                "normalized_payload": db.ensure_dict(record["normalized_payload"]),
             }
             for record in records
         ],

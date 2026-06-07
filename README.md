@@ -231,6 +231,8 @@ Short version:
 
 12. Add DNS/Caddy and OpenClaw after the backend is healthy.
 
+13. Add Google Health after the backend is healthy if you want Fitbit-backed activity data. See [docs/google-health-connector.md](docs/google-health-connector.md).
+
 ## Connecting OpenClaw
 
 OpenClaw should call the assistant API as a tool server.
@@ -379,3 +381,11 @@ git push -u origin main
 The Google Health connector is the first real health-data import path. It uses OAuth, stores tokens in Postgres, and imports `exercise` data points into `source_records`.
 
 See [docs/google-health-connector.md](docs/google-health-connector.md).
+
+The connector currently supports:
+
+- OAuth start/callback/status
+- access-token refresh through the saved refresh token
+- read-only `exercise` data point sync
+- idempotent upsert into `source_records`
+- normalized exercise fields for later LangGraph summaries
