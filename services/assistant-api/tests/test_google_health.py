@@ -110,3 +110,10 @@ def test_normalize_exercise_data_point_from_codelab_shape() -> None:
         "steps": "2038",
         "active_zone_minutes": "0",
     }
+
+
+def test_parse_google_timestamp() -> None:
+    parsed = google_health.parse_google_timestamp("2026-06-06T03:55:04.257Z")
+
+    assert parsed is not None
+    assert parsed.isoformat() == "2026-06-06T03:55:04.257000+00:00"

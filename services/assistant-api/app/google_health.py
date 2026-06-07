@@ -131,6 +131,12 @@ def is_token_expired(tokens: dict[str, Any]) -> bool:
     return datetime.fromisoformat(expires_at) <= datetime.now(UTC)
 
 
+def parse_google_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 async def list_exercise_data_points(access_token: str, client: httpx.AsyncClient | None = None) -> list[dict[str, Any]]:
     close_client = client is None
     client = client or httpx.AsyncClient(timeout=60)

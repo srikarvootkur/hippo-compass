@@ -277,7 +277,7 @@ async def google_health_sync(request: GoogleHealthSyncRequest) -> dict[str, Any]
                 "source_name": google_health.SOURCE_NAME,
                 "external_id": external_id,
                 "record_type": request.data_type,
-                "occurred_at": normalized.get("start_time"),
+                "occurred_at": google_health.parse_google_timestamp(normalized.get("start_time")),
                 "raw_payload": point,
                 "normalized_payload": normalized,
             },
