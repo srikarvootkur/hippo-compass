@@ -5,6 +5,16 @@ from typing import Any
 import asyncpg
 
 
+def ensure_dict(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        return json.loads(value)
+    return dict(value)
+
+
 async def create_pool() -> asyncpg.Pool | None:
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
@@ -169,7 +179,11 @@ async def get_source_connection(pool: asyncpg.Pool, source_name: str) -> dict[st
         """,
         source_name,
     )
-    return dict(row) if row else None
+    if not row:
+        return None
+    result = dict(row)
+    result["config"] = ensure_dict(result.get("config"))
+    return result
 
 
 async def upsert_source_record(pool: asyncpg.Pool, record: dict[str, Any]) -> dict[str, Any]:
