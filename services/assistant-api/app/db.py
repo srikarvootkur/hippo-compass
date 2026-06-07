@@ -137,3 +137,67 @@ async def insert_tool_run(pool: asyncpg.Pool, tool_run: dict[str, Any]) -> dict[
         tool_run["status"],
     )
     return dict(row)
+
+
+async def upsert_source_connection(
+    pool: asyncpg.Pool,
+    source_name: str,
+    status: str,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO source_connections (source_name, status, config)
+        VALUES ($1, $2, $3::jsonb)
+        ON CONFLICT (source_name)
+        DO UPDATE SET status = excluded.status, config = excluded.config, updated_at = now()
+        RETURNING id, source_name, status, config, created_at, updated_at
+        """,
+        source_name,
+        status,
+        json.dumps(config),
+    )
+    return dict(row)
+
+
+async def get_source_connection(pool: asyncpg.Pool, source_name: str) -> dict[str, Any] | None:
+    row = await pool.fetchrow(
+        """
+        SELECT id, source_name, status, config, created_at, updated_at
+        FROM source_connections
+        WHERE source_name = $1
+        """,
+        source_name,
+    )
+    return dict(row) if row else None
+
+
+async def upsert_source_record(pool: asyncpg.Pool, record: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO source_records (
+            source_name,
+            external_id,
+            record_type,
+            occurred_at,
+            raw_payload,
+            normalized_payload
+        )
+        VALUES ($1, $2, $3, $4::timestamptz, $5::jsonb, $6::jsonb)
+        ON CONFLICT (source_name, external_id)
+        DO UPDATE SET
+            record_type = excluded.record_type,
+            occurred_at = excluded.occurred_at,
+            raw_payload = excluded.raw_payload,
+            normalized_payload = excluded.normalized_payload,
+            created_at = source_records.created_at
+        RETURNING id, source_name, external_id, record_type, occurred_at, raw_payload, normalized_payload, created_at
+        """,
+        record["source_name"],
+        record["external_id"],
+        record["record_type"],
+        record.get("occurred_at"),
+        json.dumps(record["raw_payload"]),
+        json.dumps(record["normalized_payload"]),
+    )
+    return dict(row)

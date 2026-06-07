@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_source_records_source_type ON source_records (source_name, record_type);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_connections_source_name ON source_connections (source_name);
 CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories (kind);
 CREATE INDEX IF NOT EXISTS idx_journal_entries_occurred_at ON journal_entries (occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_recommendations_status ON recommendations (status);

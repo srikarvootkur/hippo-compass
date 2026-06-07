@@ -32,6 +32,7 @@ The assistant can use OpenAI, OpenClaw, Claude, Gemini, Codex, or something else
 - **Docker Compose** for deployment.
 - **Redis** for background jobs and queues.
 - **Caddy** for HTTPS.
+- **Google Health API connector** for read-only Fitbit-backed activity/fitness imports.
 
 ## Repo Layout
 
@@ -56,7 +57,9 @@ runbooks/              Ops notes and future migration guides
 
 This gets the services running locally with mock workflows.
 
-1. Install Docker Desktop.
+1. Install Docker Desktop if you are running this on your Mac.
+
+   You do not need Docker Desktop on a Linux VPS. On Hetzner, install Docker Engine and the Docker Compose plugin.
 
 2. Copy the environment template:
 
@@ -131,12 +134,14 @@ Short version:
 
 1. Create a Hetzner Cloud VPS with Ubuntu LTS.
 2. Add your SSH key.
-3. Point DNS records at the server:
+3. Optional: point DNS records at the server if you already own a domain:
 
    ```text
    assistant.yourdomain.com -> server IPv4
    openclaw.yourdomain.com  -> server IPv4
    ```
+
+   If you do not own a domain yet, skip DNS for now and use SSH tunnels while building.
 
 4. SSH in:
 
@@ -174,6 +179,8 @@ Short version:
    cp infra/env.example .env
    ```
 
+   If the repo is private, use a GitHub deploy key or a fine-grained token with `Contents: Read-only`. Do not commit tokens or keys to this repo.
+
 8. Edit `.env` with real values:
 
    ```bash
@@ -190,22 +197,57 @@ Short version:
    OPENAI_API_KEY=your-openai-api-key
    ```
 
-9. Start production services:
+9. Start the backend services first.
+
+   For a first VPS setup without managed Postgres yet, use the local Postgres profile:
 
    ```bash
-   docker compose -f infra/docker-compose.yml --env-file .env --profile production --profile openclaw up -d --build
+   docker compose -f infra/docker-compose.yml --env-file .env --profile local-db up -d --build
    ```
 
-10. Check status:
+   If you already configured managed Postgres, omit `--profile local-db`:
+
+   ```bash
+   docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+   ```
+
+10. Check status locally on the VPS:
 
    ```bash
    docker compose -f infra/docker-compose.yml --env-file .env ps
-   curl https://assistant.yourdomain.com/health
+   curl http://localhost:8080/health
+   curl http://localhost:8070/health
+   curl http://localhost:8090/health
    ```
+
+11. Try the mock workflow:
+
+   ```bash
+   curl -X POST http://localhost:8080/workflows/cronometer/daily-review \
+     -H "Content-Type: application/json" \
+     -H "X-Assistant-API-Key: your-secret" \
+     -d '{"use_mock_data": true}'
+   ```
+
+12. Add DNS/Caddy and OpenClaw after the backend is healthy.
 
 ## Connecting OpenClaw
 
 OpenClaw should call the assistant API as a tool server.
+
+For first setup, keep OpenClaw simple:
+
+- Provider: OpenAI.
+- Search provider: DuckDuckGo or skip.
+- Channel: Telegram is fine if you already have a bot token. Otherwise skip.
+- Skills: skip until the dashboard/provider work.
+- Hooks: skip until you need custom guardrails or approval automation.
+
+Use the current OpenClaw Docker setup script from the OpenClaw repo root:
+
+```bash
+./scripts/docker/setup.sh
+```
 
 Minimum endpoints:
 
@@ -232,6 +274,43 @@ Workflow rule:
 - `langgraph-workflows` owns durable workflow orchestration.
 - `agents-workflows` owns focused OpenAI-native specialist tasks.
 - Postgres remains the source of truth.
+
+Recommended order:
+
+1. Get `assistant-api`, `langgraph-workflows`, `agents-workflows`, Redis, and Postgres healthy.
+2. Add DNS/Caddy if you want public HTTPS URLs.
+3. Install and configure OpenClaw.
+
+Without DNS, access services from your Mac with an SSH tunnel:
+
+```bash
+ssh -L 8080:localhost:8080 -L 8070:localhost:8070 -L 8090:localhost:8090 root@YOUR_SERVER_IP
+```
+
+Then use `http://localhost:8080` from your Mac while the tunnel is open.
+
+OpenClaw runs in its own Docker Compose project. Without DNS/Caddy, connect it to Hippo Compass with a shared Docker network:
+
+```bash
+docker network create hippo-compass-net
+docker network connect --alias assistant-api hippo-compass-net infra-assistant-api-1
+docker network connect hippo-compass-net openclaw-openclaw-gateway-1
+```
+
+Then OpenClaw should use:
+
+```text
+HIPPO_COMPASS_API_URL=http://assistant-api:8080
+HIPPO_COMPASS_API_KEY=your-secret
+```
+
+If OpenClaw errors on `openai/gpt-5.3-codex`, switch to a regular OpenAI model:
+
+```bash
+cd /opt/openclaw
+docker compose -f /opt/openclaw/docker-compose.yml run --rm openclaw-cli config set agents.defaults.model.primary openai/gpt-5.4-mini
+docker compose -f /opt/openclaw/docker-compose.yml restart openclaw-gateway
+```
 
 ## Safety Defaults
 
@@ -294,3 +373,9 @@ git push -u origin main
 4. Deploy to Hetzner.
 5. Connect OpenClaw to the assistant API.
 6. Replace mock Cronometer data with the first real connector.
+
+## Google Health Connector
+
+The Google Health connector is the first real health-data import path. It uses OAuth, stores tokens in Postgres, and imports `exercise` data points into `source_records`.
+
+See [docs/google-health-connector.md](docs/google-health-connector.md).

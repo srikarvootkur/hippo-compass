@@ -2,13 +2,14 @@
 
 Recommended order:
 
-1. Google Calendar and Tasks.
-2. Cronometer export/API.
-3. Hevy.
-4. RingConn.
-5. Telegram approval interface.
-6. Finance aggregators in read-only mode.
-7. Mac iMessage bridge.
+1. Google Health API for Fitbit-backed activity/fitness data.
+2. Google Calendar and Tasks.
+3. Cronometer export/API.
+4. Hevy.
+5. RingConn.
+6. Telegram approval interface.
+7. Finance aggregators in read-only mode.
+8. Mac iMessage bridge.
 
 Each connector should write to `source_records` first, then create normalized facts and memory candidates.
 
@@ -27,3 +28,13 @@ Each connector should follow the same simple path:
 This keeps connectors boring and makes the assistant easier to debug later.
 
 Use LangGraph for connectors that need durable state, retries, or approval checkpoints. Keep simple one-shot imports as boring worker/API code.
+
+## Google Health API
+
+The first health connector is Google Health API with the readonly activity/fitness scope:
+
+```text
+https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly
+```
+
+See `docs/google-health-connector.md`.

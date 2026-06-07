@@ -1,5 +1,5 @@
 import os
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI
@@ -15,6 +15,7 @@ except Exception:  # pragma: no cover - lets mock mode run without SDK import su
 
 APP_NAME = "personal-assistant-agents-workflows"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
+UTC = timezone.utc
 
 app = FastAPI(title=APP_NAME, version="0.1.0")
 

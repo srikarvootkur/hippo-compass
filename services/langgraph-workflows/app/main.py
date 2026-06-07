@@ -1,5 +1,5 @@
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, TypedDict
 
 import httpx
@@ -16,6 +16,7 @@ except Exception:  # pragma: no cover - keeps health/mock paths usable if deps d
 
 APP_NAME = "hippo-compass-langgraph-workflows"
 AGENTS_WORKFLOWS_URL = os.getenv("AGENTS_WORKFLOWS_URL", "http://agents-workflows:8090")
+UTC = timezone.utc
 
 app = FastAPI(title=APP_NAME, version="0.1.0")
 
