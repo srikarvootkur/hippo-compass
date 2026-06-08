@@ -109,6 +109,8 @@ This repo includes starter OpenClaw-style workspace skills:
 - `skills/review-recommendations`
 - `skills/health-coach`
 
+For the reusable build workflow, see [../runbooks/adding-new-skill.md](../runbooks/adding-new-skill.md).
+
 Configure their environment with:
 
 ```text

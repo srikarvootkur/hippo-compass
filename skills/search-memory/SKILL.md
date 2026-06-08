@@ -1,3 +1,15 @@
+---
+name: search-memory
+description: "Search durable Hippo Compass memory when the user asks what the assistant remembers, wants prior context loaded, or wants old themes recalled."
+metadata:
+  {
+    "openclaw":
+      {
+        "requires": { "bins": ["python3"] },
+      },
+  }
+---
+
 # Search Hippo Compass Memory
 
 Use this skill when the user asks what Hippo Compass remembers, wants context loaded, or wants prior themes searched.

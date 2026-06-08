@@ -1,3 +1,15 @@
+---
+name: review-recommendations
+description: "Review pending Hippo Compass assistant recommendations and reminders without directly taking external actions."
+metadata:
+  {
+    "openclaw":
+      {
+        "requires": { "bins": ["python3"] },
+      },
+  }
+---
+
 # Review Hippo Compass Recommendations
 
 Use this skill when the user wants to inspect assistant-generated recommendations.

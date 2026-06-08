@@ -48,6 +48,7 @@ services/
   workers/             Background worker skeleton
   mac-bridge/          Future local-only Mac/iMessage bridge
 skills/                OpenClaw workspace skills that call the assistant API
+templates/             Starter templates for new OpenClaw skills
 db/migrations/         Postgres and pgvector schema
 prompts/               Starting prompts
 runbooks/              Ops notes and future migration guides
@@ -342,6 +343,18 @@ If this repo ever becomes public:
 - keep dangerous actions behind approvals
 - keep real profile/journal/style notes out of `context/`
 - use synthetic `evals/` cases for demos and regression checks
+
+## Building New Skills
+
+New assistant abilities should usually be built as a Hippo Compass API/workflow first, then exposed to OpenClaw through a thin skill.
+
+Start here:
+
+- [runbooks/adding-new-skill.md](runbooks/adding-new-skill.md)
+- [skills/README.md](skills/README.md)
+- [templates/openclaw-skill](templates/openclaw-skill)
+
+The short version: keep credentials, memory, and durable logic behind `assistant-api`; keep OpenClaw skills small, testable, and easy to reinstall.
 
 ## Push To GitHub
 

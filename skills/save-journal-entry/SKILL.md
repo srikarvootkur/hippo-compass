@@ -1,3 +1,15 @@
+---
+name: save-journal-entry
+description: "Save a journal entry, reflection, voice transcript, or life note into durable Hippo Compass memory."
+metadata:
+  {
+    "openclaw":
+      {
+        "requires": { "bins": ["python3"] },
+      },
+  }
+---
+
 # Save Hippo Compass Journal Entry
 
 Use this skill when the user wants to save a journal entry, reflection, voice transcript, or life note into durable memory.
