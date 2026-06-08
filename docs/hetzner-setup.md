@@ -323,6 +323,7 @@ cp -R ~/hippo-compass/skills/search-memory /root/.openclaw/workspace/skills/
 cp -R ~/hippo-compass/skills/save-journal-entry /root/.openclaw/workspace/skills/
 cp -R ~/hippo-compass/skills/review-recommendations /root/.openclaw/workspace/skills/
 cp -R ~/hippo-compass/skills/health-coach /root/.openclaw/workspace/skills/
+chown -R 1000:1000 /root/.openclaw/workspace/skills
 chmod -R a+rX /root/.openclaw/workspace/skills
 ```
 
@@ -338,6 +339,27 @@ After Google Health OAuth is connected, test the coach skill:
 
 ```bash
 HIPPO_COMPASS_API_URL=http://assistant-api:8080 HIPPO_COMPASS_API_KEY=YOUR_ASSISTANT_API_KEY python3 /home/node/.openclaw/workspace/skills/health-coach/scripts/health_coach.py --period-days 7 --question "Review my health this week."
+```
+
+Register custom skills so the Telegram-facing model can see them:
+
+```bash
+cd /opt/openclaw
+docker compose -f /opt/openclaw/docker-compose.yml run --rm openclaw-cli skills install /home/node/.openclaw/workspace/skills/health-coach --as health-coach --force --agent main
+docker compose -f /opt/openclaw/docker-compose.yml run --rm openclaw-cli skills check --agent main
+```
+
+Add Hippo Compass env vars to `/opt/openclaw/.env` so the registered skill can run without inline secrets:
+
+```text
+HIPPO_COMPASS_API_URL=http://assistant-api:8080
+HIPPO_COMPASS_API_KEY=YOUR_ASSISTANT_API_KEY
+```
+
+Restart after changing `/opt/openclaw/.env`:
+
+```bash
+docker compose -f /opt/openclaw/docker-compose.yml restart openclaw-gateway
 ```
 
 If Telegram fails with a `gpt-5.3-codex` model error, switch to a regular OpenAI model and restart:

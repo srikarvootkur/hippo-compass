@@ -1,3 +1,15 @@
+---
+name: health-coach
+description: "Review Google Health/Fitbit activity through Hippo Compass for wellness coaching, workout consistency, exercise summaries, and health next actions."
+metadata:
+  {
+    "openclaw":
+      {
+        "requires": { "bins": ["python3"] },
+      },
+  }
+---
+
 # Hippo Compass Health Coach
 
 Use this skill when the user asks for a Google Health/Fitbit activity review, wellness coaching, workout consistency advice, or a summary of recent health data.
@@ -31,4 +43,10 @@ Use this skill when the user asks for a Google Health/Fitbit activity review, we
 
 ```bash
 python3 scripts/health_coach.py --period-days 7 --question "Review my health this week and tell me what to improve next."
+```
+
+On the Hetzner OpenClaw gateway, use:
+
+```bash
+HIPPO_COMPASS_API_URL=http://assistant-api:8080 HIPPO_COMPASS_API_KEY=$HIPPO_COMPASS_API_KEY python3 /home/node/.openclaw/workspace/skills/health-coach/scripts/health_coach.py --period-days 7 --question "Review my health this week and tell me what to improve next."
 ```
