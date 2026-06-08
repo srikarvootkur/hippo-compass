@@ -296,7 +296,7 @@ async def sync_google_health_records(pool: Any, data_type: str = google_health.R
             {
                 "source_name": google_health.SOURCE_NAME,
                 "external_id": external_id,
-                "record_type": request.data_type,
+                "record_type": data_type,
                 "occurred_at": google_health.parse_google_timestamp(normalized.get("start_time")),
                 "raw_payload": point,
                 "normalized_payload": normalized,
