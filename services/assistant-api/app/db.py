@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import json
 from typing import Any
@@ -70,6 +72,38 @@ async def search_memories(
             limit,
         )
     return [dict(row) for row in rows]
+
+
+async def list_active_goals(pool: asyncpg.Pool, category: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+    if category:
+        rows = await pool.fetch(
+            """
+            SELECT id, name, category, status, target, notes, created_at, updated_at
+            FROM goals
+            WHERE status = 'active' AND category = $1
+            ORDER BY updated_at DESC
+            LIMIT $2
+            """,
+            category,
+            limit,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT id, name, category, status, target, notes, created_at, updated_at
+            FROM goals
+            WHERE status = 'active'
+            ORDER BY updated_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    results = []
+    for row in rows:
+        result = dict(row)
+        result["target"] = ensure_dict(result.get("target"))
+        results.append(result)
+    return results
 
 
 async def insert_approval(pool: asyncpg.Pool, approval: dict[str, Any]) -> dict[str, Any]:
@@ -215,3 +249,34 @@ async def upsert_source_record(pool: asyncpg.Pool, record: dict[str, Any]) -> di
         json.dumps(record["normalized_payload"]),
     )
     return dict(row)
+
+
+async def list_source_records(
+    pool: asyncpg.Pool,
+    source_name: str,
+    record_type: str,
+    since: Any,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    rows = await pool.fetch(
+        """
+        SELECT id, source_name, external_id, record_type, occurred_at, raw_payload, normalized_payload, created_at
+        FROM source_records
+        WHERE source_name = $1
+          AND record_type = $2
+          AND occurred_at >= $3::timestamptz
+        ORDER BY occurred_at DESC
+        LIMIT $4
+        """,
+        source_name,
+        record_type,
+        since,
+        limit,
+    )
+    results = []
+    for row in rows:
+        result = dict(row)
+        result["raw_payload"] = ensure_dict(result.get("raw_payload"))
+        result["normalized_payload"] = ensure_dict(result.get("normalized_payload"))
+        results.append(result)
+    return results

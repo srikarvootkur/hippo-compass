@@ -322,6 +322,7 @@ mkdir -p /root/.openclaw/workspace/skills
 cp -R ~/hippo-compass/skills/search-memory /root/.openclaw/workspace/skills/
 cp -R ~/hippo-compass/skills/save-journal-entry /root/.openclaw/workspace/skills/
 cp -R ~/hippo-compass/skills/review-recommendations /root/.openclaw/workspace/skills/
+cp -R ~/hippo-compass/skills/health-coach /root/.openclaw/workspace/skills/
 chmod -R a+rX /root/.openclaw/workspace/skills
 ```
 
@@ -331,6 +332,12 @@ Test:
 
 ```bash
 HIPPO_COMPASS_API_URL=http://assistant-api:8080 HIPPO_COMPASS_API_KEY=YOUR_ASSISTANT_API_KEY python3 /home/node/.openclaw/workspace/skills/search-memory/scripts/search_memory.py --query test
+```
+
+After Google Health OAuth is connected, test the coach skill:
+
+```bash
+HIPPO_COMPASS_API_URL=http://assistant-api:8080 HIPPO_COMPASS_API_KEY=YOUR_ASSISTANT_API_KEY python3 /home/node/.openclaw/workspace/skills/health-coach/scripts/health_coach.py --period-days 7 --question "Review my health this week."
 ```
 
 If Telegram fails with a `gpt-5.3-codex` model error, switch to a regular OpenAI model and restart:
@@ -381,6 +388,16 @@ curl -X POST \
   -H "X-Assistant-API-Key: YOUR_ASSISTANT_API_KEY" \
   -d '{"data_type":"exercise"}' \
   http://localhost:8080/connectors/google-health/sync
+```
+
+Run the coach review:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Assistant-API-Key: YOUR_ASSISTANT_API_KEY" \
+  -d '{"period_days":7,"force_sync":true,"question":"Review my health this week and tell me what to improve next.","goals":{}}' \
+  http://localhost:8080/workflows/google-health/coach-review
 ```
 
 ## Maintenance Commands

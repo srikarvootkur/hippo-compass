@@ -107,6 +107,7 @@ This repo includes starter OpenClaw-style workspace skills:
 - `skills/search-memory`
 - `skills/save-journal-entry`
 - `skills/review-recommendations`
+- `skills/health-coach`
 
 Configure their environment with:
 
@@ -155,6 +156,7 @@ mkdir -p /root/.openclaw/workspace/skills
 cp -R ~/hippo-compass/skills/search-memory /root/.openclaw/workspace/skills/
 cp -R ~/hippo-compass/skills/save-journal-entry /root/.openclaw/workspace/skills/
 cp -R ~/hippo-compass/skills/review-recommendations /root/.openclaw/workspace/skills/
+cp -R ~/hippo-compass/skills/health-coach /root/.openclaw/workspace/skills/
 chmod -R a+rX /root/.openclaw/workspace/skills
 ```
 
@@ -181,6 +183,7 @@ Save and search a first journal entry:
 ```bash
 HIPPO_COMPASS_API_URL=http://assistant-api:8080 HIPPO_COMPASS_API_KEY=your-secret python3 /home/node/.openclaw/workspace/skills/save-journal-entry/scripts/save_journal_entry.py --source manual --content "I got Hippo Compass and OpenClaw connected today."
 HIPPO_COMPASS_API_URL=http://assistant-api:8080 HIPPO_COMPASS_API_KEY=your-secret python3 /home/node/.openclaw/workspace/skills/search-memory/scripts/search_memory.py --query "OpenClaw connected"
+HIPPO_COMPASS_API_URL=http://assistant-api:8080 HIPPO_COMPASS_API_KEY=your-secret python3 /home/node/.openclaw/workspace/skills/health-coach/scripts/health_coach.py --period-days 7 --question "Review my health this week."
 ```
 
 Manual `docker network connect` changes may need to be repeated if containers are recreated. Make this persistent later with Compose network configuration or DNS/Caddy.

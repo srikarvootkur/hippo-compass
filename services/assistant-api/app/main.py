@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 import httpx
@@ -10,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from app import db
 from app import google_health
+from app import health_coach
 
 
 APP_NAME = "personal-assistant-api"
@@ -59,22 +62,22 @@ class ApprovalRequest(BaseModel):
     title: str
     proposed_payload: dict[str, Any]
     risk: ActionRisk = ActionRisk.sensitive
-    reason: str | None = None
+    reason: Optional[str] = None
 
 
 class JournalEntryCreate(BaseModel):
     content: str = Field(..., min_length=1)
-    title: str | None = None
+    title: Optional[str] = None
     source: str = "manual"
-    entry_date: str | None = Field(default=None, description="YYYY-MM-DD")
-    occurred_at: str | None = None
-    summary: str | None = None
+    entry_date: Optional[str] = Field(default=None, description="YYYY-MM-DD")
+    occurred_at: Optional[str] = None
+    summary: Optional[str] = None
 
 
 class RecommendationCreate(BaseModel):
     title: str = Field(..., min_length=1)
     body: str = Field(..., min_length=1)
-    reason: str | None = None
+    reason: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -86,7 +89,7 @@ class ToolRunCreate(BaseModel):
 
 
 class CronometerReviewRequest(BaseModel):
-    date: str | None = Field(default=None, description="YYYY-MM-DD. Defaults to today in workflow service.")
+    date: Optional[str] = Field(default=None, description="YYYY-MM-DD. Defaults to today in workflow service.")
     use_mock_data: bool = True
     goals: dict[str, Any] = Field(default_factory=dict)
 
@@ -95,7 +98,17 @@ class GoogleHealthSyncRequest(BaseModel):
     data_type: str = Field(default="exercise", pattern="^exercise$")
 
 
-def require_api_key(x_assistant_api_key: str | None = Header(default=None)) -> None:
+class GoogleHealthCoachReviewRequest(BaseModel):
+    period_days: int = Field(default=7, ge=1, le=90)
+    force_sync: bool = True
+    question: str = Field(
+        default="Review my recent Google Health activity and tell me what to improve next.",
+        min_length=1,
+    )
+    goals: dict[str, Any] = Field(default_factory=dict)
+
+
+def require_api_key(x_assistant_api_key: Optional[str] = Header(default=None)) -> None:
     if API_KEY and x_assistant_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="invalid assistant API key")
 
@@ -192,9 +205,9 @@ async def google_health_oauth_start() -> dict[str, Any]:
 
 @app.get("/connectors/google-health/oauth/callback")
 async def google_health_oauth_callback(
-    code: str | None = Query(default=None),
-    state: str | None = Query(default=None),
-    error: str | None = Query(default=None),
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
     if error:
         raise HTTPException(status_code=400, detail=f"Google OAuth error: {error}")
@@ -247,6 +260,11 @@ async def google_health_status() -> dict[str, Any]:
 @app.post("/connectors/google-health/sync", dependencies=[Depends(require_api_key)])
 async def google_health_sync(request: GoogleHealthSyncRequest) -> dict[str, Any]:
     pool = require_db_pool()
+    records = await sync_google_health_records(pool, request.data_type)
+    return serialize_google_health_sync(records, request.data_type)
+
+
+async def sync_google_health_records(pool: Any, data_type: str = google_health.RECORD_TYPE_EXERCISE) -> list[dict[str, Any]]:
     connection = await db.get_source_connection(pool, google_health.SOURCE_NAME)
     if not connection or connection["status"] != "active":
         raise HTTPException(status_code=400, detail="Google Health connector is not active")
@@ -261,6 +279,8 @@ async def google_health_sync(request: GoogleHealthSyncRequest) -> dict[str, Any]
                 "active",
                 {**config, "tokens": tokens},
             )
+        if data_type != google_health.RECORD_TYPE_EXERCISE:
+            raise ValueError(f"Unsupported Google Health data type: {data_type}")
         data_points = await google_health.list_exercise_data_points(tokens["access_token"])
     except (httpx.HTTPError, KeyError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"Google Health sync failed: {exc}") from exc
@@ -283,9 +303,13 @@ async def google_health_sync(request: GoogleHealthSyncRequest) -> dict[str, Any]
             },
         )
         records.append(record)
+    return records
+
+
+def serialize_google_health_sync(records: list[dict[str, Any]], data_type: str) -> dict[str, Any]:
     return {
         "source_name": google_health.SOURCE_NAME,
-        "record_type": request.data_type,
+        "record_type": data_type,
         "synced_count": len(records),
         "records": [
             {
@@ -296,6 +320,93 @@ async def google_health_sync(request: GoogleHealthSyncRequest) -> dict[str, Any]
             }
             for record in records
         ],
+    }
+
+
+@app.post("/workflows/google-health/coach-review", dependencies=[Depends(require_api_key)])
+async def google_health_coach_review(request: GoogleHealthCoachReviewRequest) -> dict[str, Any]:
+    pool = require_db_pool()
+    if request.force_sync:
+        await sync_google_health_records(pool)
+
+    since = datetime.now(UTC) - timedelta(days=request.period_days)
+    records = await db.list_source_records(
+        pool,
+        google_health.SOURCE_NAME,
+        google_health.RECORD_TYPE_EXERCISE,
+        since,
+    )
+    activity_summary = health_coach.summarize_exercise_records(records, request.period_days)
+    memories = await db.search_memories(
+        pool,
+        "health fitness exercise workout recovery sleep goals consistency",
+        8,
+        {},
+    )
+    active_goals = await db.list_active_goals(pool, category="health", limit=10)
+    workflow_request = {
+        "period_days": request.period_days,
+        "question": request.question,
+        "goals": request.goals,
+        "active_goals": [
+            {
+                "id": str(goal["id"]),
+                "name": goal["name"],
+                "category": goal["category"],
+                "target": goal["target"],
+                "notes": goal.get("notes"),
+            }
+            for goal in active_goals
+        ],
+        "relevant_memories": [
+            {
+                "id": str(memory["id"]),
+                "kind": memory["kind"],
+                "content": memory["content"],
+                "source": memory["source"],
+                "metadata": db.ensure_dict(memory.get("metadata")),
+            }
+            for memory in memories
+        ],
+        "activity_summary": activity_summary,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            response = await client.post(
+                f"{LANGGRAPH_WORKFLOWS_URL}/workflows/google-health/coach-review",
+                json=workflow_request,
+            )
+            response.raise_for_status()
+            review = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Google Health coach workflow failed: {exc}") from exc
+
+    recommendation = review.get("recommendation") or {
+        "title": "Review Google Health coach summary",
+        "body": review.get("summary", ""),
+        "reason": "Generated from Google Health coach review.",
+        "metadata": {"workflow": "google_health_coach_review"},
+    }
+    created_recommendation = await db.insert_recommendation(pool, recommendation)
+    created_memories = []
+    for memory in review.get("memory_candidates") or []:
+        if memory.get("content"):
+            created_memories.append(
+                await db.insert_memory(
+                    pool,
+                    {
+                        "kind": memory.get("kind", "health_pattern"),
+                        "content": memory["content"],
+                        "source": memory.get("source", "google_health_coach_review"),
+                        "metadata": memory.get("metadata") or {"period_days": request.period_days},
+                    },
+                )
+            )
+
+    return {
+        **review,
+        "created_recommendation_id": str(created_recommendation["id"]),
+        "created_memory_ids": [str(memory["id"]) for memory in created_memories],
     }
 
 

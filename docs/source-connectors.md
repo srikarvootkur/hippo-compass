@@ -38,3 +38,11 @@ https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly
 ```
 
 See `docs/google-health-connector.md`.
+
+The first consumer workflow is the Google Health Coach:
+
+```text
+POST /workflows/google-health/coach-review
+```
+
+See `docs/google-health-coach.md`.

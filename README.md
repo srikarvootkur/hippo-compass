@@ -261,6 +261,7 @@ Minimum endpoints:
 - `POST /approvals`
 - `POST /tool_runs`
 - `POST /workflows/cronometer/daily-review`
+- `POST /workflows/google-health/coach-review`
 
 Use this header:
 
@@ -389,3 +390,17 @@ The connector currently supports:
 - read-only `exercise` data point sync
 - idempotent upsert into `source_records`
 - normalized exercise fields for later LangGraph summaries
+
+## Google Health Coach
+
+The Google Health Coach workflow exposes a single OpenClaw skill for wellness coaching from Google Health data. It syncs Google Health, summarizes recent exercise records, loads health goals/memory, applies a curated evidence pack, and stores the resulting recommendation/memory candidates.
+
+Example:
+
+```bash
+python3 /home/node/.openclaw/workspace/skills/health-coach/scripts/health_coach.py \
+  --period-days 7 \
+  --question "Review my health this week and tell me what to improve next."
+```
+
+See [docs/google-health-coach.md](docs/google-health-coach.md).

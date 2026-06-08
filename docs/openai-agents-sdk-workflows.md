@@ -7,15 +7,16 @@ LangGraph is the default durable workflow orchestrator. OpenAI Agents SDK servic
 Initial workflows:
 
 - Cronometer daily review
-- Weekly health review
+- Google Health coach review
 - Writing-style reply draft
 - Journal/coaching synthesis
 - City/date planning
 
-The first implemented specialist endpoint is:
+Implemented specialist endpoints:
 
 ```text
 POST /workflows/cronometer/daily-review
+POST /workflows/google-health/coach-review
 ```
 
 Mock mode works without an OpenAI API key. Real agent mode uses `OPENAI_API_KEY` and `OPENAI_MODEL`.
