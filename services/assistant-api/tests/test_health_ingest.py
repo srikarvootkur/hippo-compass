@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from app import health_ingest
@@ -28,6 +29,31 @@ def test_source_record_to_typed_rows_creates_sleep_session() -> None:
     assert session["metrics"]["sleep_summary"] == {"minutesAsleep": "407"}
 
 
+def test_source_record_to_typed_rows_accepts_json_string_payload() -> None:
+    observation, session = health_ingest.source_record_to_typed_rows(
+        {
+            "id": "record-id",
+            "source_name": "google_health",
+            "external_id": "steps-id",
+            "record_type": "steps",
+            "normalized_payload": json.dumps(
+                {
+                    "data_type": "steps",
+                    "record_type": "interval",
+                    "category": "activity",
+                    "start_time": "2026-06-06T12:00:00Z",
+                    "numeric_summary": {"steps": 1200},
+                }
+            ),
+        }
+    )
+
+    assert session is None
+    assert observation is not None
+    assert observation["data_type"] == "steps"
+    assert observation["value_numeric"] == 1200
+
+
 def test_summarize_normalized_records_groups_daily_metrics() -> None:
     summaries = health_ingest.summarize_normalized_records(
         [
@@ -55,6 +81,28 @@ def test_summarize_normalized_records_groups_daily_metrics() -> None:
     assert len(summaries) == 1
     assert summaries[0]["metrics"]["record_count"] == 2
     assert summaries[0]["metrics"]["steps"] == 2000
+
+
+def test_summarize_normalized_records_accepts_json_string_payload() -> None:
+    summaries = health_ingest.summarize_normalized_records(
+        [
+            {
+                "source_name": "google_health",
+                "occurred_at": datetime(2026, 6, 6, tzinfo=timezone.utc),
+                "normalized_payload": json.dumps(
+                    {
+                        "category": "activity",
+                        "civil_date": "2026-06-06",
+                        "numeric_summary": {"steps": 1200},
+                    }
+                ),
+            }
+        ]
+    )
+
+    assert len(summaries) == 1
+    assert summaries[0]["summary_date"] == "2026-06-06"
+    assert summaries[0]["metrics"]["steps"] == 1200
 
 
 def test_normalize_hevy_row_calculates_volume() -> None:

@@ -627,7 +627,7 @@ async def unified_health_coach_review(request: UnifiedHealthCoachReviewRequest) 
         await sync_google_health_data(pool)
 
     since = datetime.now(UTC) - timedelta(days=request.period_days)
-    since_date = since.date().isoformat()
+    since_date = since.date()
     daily_summaries = await db.list_health_daily_summaries(pool, since_date)
     sessions = await db.list_recent_health_sessions(pool, since)
     health_summary = health_ingest.build_health_summary(daily_summaries, sessions, request.period_days)

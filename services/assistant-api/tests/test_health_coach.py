@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -127,3 +127,81 @@ async def test_google_health_coach_endpoint_persists_workflow_outputs(monkeypatc
 
     assert response["created_recommendation_id"] == "rec-id"
     assert response["created_memory_ids"] == ["mem-id"]
+
+
+@pytest.mark.asyncio
+async def test_unified_health_coach_uses_date_for_daily_summary_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    main.app.state.db_pool = object()
+
+    async def fake_list_health_daily_summaries(pool, since_date, limit=500):
+        assert isinstance(since_date, date)
+        return []
+
+    async def fake_list_recent_health_sessions(pool, since, limit=200):
+        return []
+
+    async def fake_search_memories(pool, query, limit, filters):
+        return []
+
+    async def fake_list_active_goals(pool, category=None, limit=20):
+        return []
+
+    async def fake_insert_recommendation(pool, recommendation):
+        return {"id": "rec-id"}
+
+    async def fake_insert_memory(pool, memory):
+        return {"id": "mem-id"}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "workflow": "health_coach_review",
+                "period_days": 7,
+                "data_sources": [],
+                "summary": "Summary",
+                "patterns": [],
+                "next_actions": ["Pick one consistency target."],
+                "citations": [],
+                "recommendation": {
+                    "title": "Review health coach summary",
+                    "body": "Pick one consistency target.",
+                    "reason": "Test",
+                    "metadata": {"workflow": "health_coach_review"},
+                },
+                "memory_candidates": [],
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, json):
+            assert url.endswith("/workflows/health/coach-review")
+            return FakeResponse()
+
+    monkeypatch.setattr(main.db, "list_health_daily_summaries", fake_list_health_daily_summaries)
+    monkeypatch.setattr(main.db, "list_recent_health_sessions", fake_list_recent_health_sessions)
+    monkeypatch.setattr(main.db, "search_memories", fake_search_memories)
+    monkeypatch.setattr(main.db, "list_active_goals", fake_list_active_goals)
+    monkeypatch.setattr(main.db, "insert_recommendation", fake_insert_recommendation)
+    monkeypatch.setattr(main.db, "insert_memory", fake_insert_memory)
+    monkeypatch.setattr(main.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = await main.unified_health_coach_review(
+        main.UnifiedHealthCoachReviewRequest(
+            question="Review my week.",
+            period_days=7,
+            force_sync=False,
+        )
+    )
+
+    assert response["created_recommendation_id"] == "rec-id"

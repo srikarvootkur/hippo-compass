@@ -51,9 +51,19 @@ def first_present(row: dict[str, Any], names: list[str]) -> Any:
     return None
 
 
+def ensure_dict(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        return json.loads(value)
+    return dict(value)
+
+
 def source_record_to_typed_rows(record: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     source_name = record["source_name"]
-    normalized = record.get("normalized_payload") or {}
+    normalized = ensure_dict(record.get("normalized_payload"))
     record_type = normalized.get("record_type") or record.get("record_type")
     data_type = normalized.get("data_type") or record.get("record_type")
     external_id = record["external_id"]
@@ -201,7 +211,7 @@ def missing_categories(categories: dict[str, Any], sessions: list[dict[str, Any]
 def summarize_normalized_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     buckets: dict[tuple[str, str, str], dict[str, Any]] = {}
     for record in records:
-        normalized = record.get("normalized_payload") or {}
+        normalized = ensure_dict(record.get("normalized_payload"))
         day = daily_summary_key(normalized, record.get("occurred_at"))
         if not day:
             continue
