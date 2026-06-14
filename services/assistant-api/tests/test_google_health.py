@@ -151,6 +151,13 @@ def test_filter_for_session_uses_civil_end_date() -> None:
     assert value == 'sleep.interval.civil_end_time >= "2026-03-04"'
 
 
+def test_filter_for_exercise_uses_civil_start_time() -> None:
+    spec = google_health.DATA_TYPE_BY_NAME["exercise"]
+    value = google_health.filter_for_since(spec, datetime(2026, 3, 4, tzinfo=timezone.utc))
+
+    assert value == 'exercise.interval.civil_start_time >= "2026-03-04T00:00:00"'
+
+
 @pytest.mark.asyncio
 async def test_sleep_list_uses_reconcile_and_wearables_family() -> None:
     seen = {}

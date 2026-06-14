@@ -265,6 +265,9 @@ def filter_for_since(spec: GoogleHealthDataType, since: datetime | None) -> str 
         civil_timestamp = utc_since.replace(tzinfo=None).isoformat(timespec="seconds")
         return f'{spec.filter_name}.interval.civil_start_time >= "{civil_timestamp}"'
     if spec.record_type == "session":
+        if spec.data_type != "sleep":
+            civil_timestamp = utc_since.replace(tzinfo=None).isoformat(timespec="seconds")
+            return f'{spec.filter_name}.interval.civil_start_time >= "{civil_timestamp}"'
         return f'{spec.filter_name}.interval.civil_end_time >= "{utc_since.date().isoformat()}"'
     if spec.record_type == "sample":
         timestamp = utc_since.isoformat().replace("+00:00", "Z")
