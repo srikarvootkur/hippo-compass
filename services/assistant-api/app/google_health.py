@@ -260,12 +260,20 @@ def list_url(data_type: str, reconcile: bool = False) -> str:
 def filter_for_since(spec: GoogleHealthDataType, since: datetime | None) -> str | None:
     if since is None:
         return None
-    timestamp = since.astimezone(UTC).isoformat().replace("+00:00", "Z")
-    if spec.record_type in {"interval", "session"}:
-        return f'{spec.filter_name}.interval.start_time >= "{timestamp}"'
+    utc_since = since.astimezone(UTC)
+    if spec.record_type == "interval":
+        civil_timestamp = utc_since.replace(tzinfo=None).isoformat(timespec="seconds")
+        return f'{spec.filter_name}.interval.civil_start_time >= "{civil_timestamp}"'
+    if spec.record_type == "session":
+        return f'{spec.filter_name}.interval.civil_end_time >= "{utc_since.date().isoformat()}"'
     if spec.record_type == "sample":
+        timestamp = utc_since.isoformat().replace("+00:00", "Z")
         return f'{spec.filter_name}.sample_time.physical_time >= "{timestamp}"'
     return None
+
+
+def should_reconcile(data_type: str, spec: GoogleHealthDataType) -> bool:
+    return spec.supports_reconcile and (not spec.supports_list or data_type == "sleep")
 
 
 async def list_data_points(
@@ -291,8 +299,11 @@ async def list_data_points(
             filter_value = filter_for_since(spec, since)
             if filter_value:
                 params["filter"] = filter_value
+            reconcile = should_reconcile(data_type, spec)
+            if data_type == "sleep" and reconcile:
+                params["dataSourceFamily"] = "users/me/dataSourceFamilies/google-wearables"
             response = await client.get(
-                list_url(data_type, reconcile=not spec.supports_list),
+                list_url(data_type, reconcile=reconcile),
                 params=params,
                 headers={
                     "Authorization": f"Bearer {access_token}",

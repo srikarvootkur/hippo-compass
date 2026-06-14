@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -134,6 +135,41 @@ def test_parse_google_timestamp() -> None:
 
     assert parsed is not None
     assert parsed.isoformat() == "2026-06-06T03:55:04.257000+00:00"
+
+
+def test_filter_for_interval_uses_civil_start_time() -> None:
+    spec = google_health.DATA_TYPE_BY_NAME["steps"]
+    value = google_health.filter_for_since(spec, datetime(2026, 3, 4, tzinfo=timezone.utc))
+
+    assert value == 'steps.interval.civil_start_time >= "2026-03-04T00:00:00"'
+
+
+def test_filter_for_session_uses_civil_end_date() -> None:
+    spec = google_health.DATA_TYPE_BY_NAME["sleep"]
+    value = google_health.filter_for_since(spec, datetime(2026, 3, 4, tzinfo=timezone.utc))
+
+    assert value == 'sleep.interval.civil_end_time >= "2026-03-04"'
+
+
+@pytest.mark.asyncio
+async def test_sleep_list_uses_reconcile_and_wearables_family() -> None:
+    seen = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"dataPoints": []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        points = await google_health.list_data_points(
+            "access-token",
+            "sleep",
+            since=datetime(2026, 3, 4, tzinfo=timezone.utc),
+            client=client,
+        )
+
+    assert points == []
+    assert "/dataTypes/sleep/dataPoints:reconcile" in seen["url"]
+    assert "dataSourceFamily=users%2Fme%2FdataSourceFamilies%2Fgoogle-wearables" in seen["url"]
 
 
 def test_normalize_sleep_data_point() -> None:
