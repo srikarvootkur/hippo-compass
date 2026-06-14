@@ -36,6 +36,7 @@ class GoogleHealthCoachReviewRequest(BaseModel):
     active_goals: list[dict[str, Any]] = Field(default_factory=list)
     relevant_memories: list[dict[str, Any]] = Field(default_factory=list)
     activity_summary: dict[str, Any] = Field(default_factory=dict)
+    health_summary: dict[str, Any] = Field(default_factory=dict)
     evidence_pack: list[dict[str, str]] = Field(default_factory=list)
 
 
@@ -126,24 +127,31 @@ def is_sensitive_medical_question(question: str) -> bool:
 
 
 def deterministic_google_health_coach_review(request: GoogleHealthCoachReviewRequest) -> dict[str, Any]:
-    activity = request.activity_summary or {}
+    health_summary = request.health_summary or {}
+    activity = request.activity_summary or health_summary.get("activity") or {}
     period_days = request.period_days
     active_minutes = float(activity.get("total_active_minutes") or 0)
     target_minutes = float(activity.get("guideline_scaled_target_active_minutes") or 150 * (period_days / 7))
     active_days = int(activity.get("active_days") or 0)
     record_count = int(activity.get("record_count") or 0)
     top_types = list((activity.get("exercise_type_counts") or {}).keys())[:3]
+    data_sources = health_summary.get("data_sources") or ["google_health"]
+    sleep = health_summary.get("sleep") or {}
+    heart = health_summary.get("heart") or {}
+    nutrition = health_summary.get("nutrition") or {}
+    strength = health_summary.get("strength") or {}
+    missing = health_summary.get("missing") or []
     citations = selected_citations(request.evidence_pack)
     sensitive = is_sensitive_medical_question(request.question)
 
     if sensitive:
         return {
-            "workflow": "google_health_coach_review",
+            "workflow": "health_coach_review",
             "period_days": period_days,
-            "data_sources": ["google_health"],
+            "data_sources": data_sources,
             "summary": "I can review wellness patterns from your activity data, but I cannot diagnose symptoms, assess urgent risk, or advise on medication changes.",
             "patterns": [
-                f"Google Health has {record_count} exercise record(s) in the last {period_days} day(s).",
+                f"Hippo Compass has {record_count} activity record(s) plus typed health summaries for the last {period_days} day(s).",
                 f"Recorded active time is about {round(active_minutes, 1)} minute(s) across {active_days} active day(s).",
             ],
             "evidence_based_guidance": [
@@ -160,37 +168,41 @@ def deterministic_google_health_coach_review(request: GoogleHealthCoachReviewReq
             "safety_level": "medical_boundary",
         }
 
-    if record_count == 0:
-        patterns = [f"No Google Health exercise records were found for the last {period_days} day(s)."]
+    if record_count == 0 and not health_summary.get("daily_summary_count") and not strength.get("session_count"):
+        patterns = [f"No typed health records were found for the last {period_days} day(s)."]
         next_actions = [
-            "Confirm your Google Health/Fitbit sync is working before drawing conclusions.",
-            "After data appears, run this review again and compare active minutes, active days, and workout mix.",
+            "Confirm your Google Health/Fitbit sync or CSV imports are working before drawing conclusions.",
+            "After data appears, run this review again and compare activity, sleep, nutrition, and training patterns.",
         ]
     else:
         patterns = [
             f"You logged about {round(active_minutes, 1)} active minute(s) across {active_days} active day(s) in the last {period_days} day(s).",
             f"Your most common recorded activity type(s): {', '.join(top_types) if top_types else 'not enough labeled activity yet'}.",
             f"This is about {round((active_minutes / target_minutes) * 100, 1) if target_minutes else 0}% of the scaled 150-minute weekly activity guideline target.",
+            f"Sleep records: {sleep.get('session_count', 0)} session(s), average asleep minutes: {sleep.get('average_minutes_asleep', 0)}.",
+            f"Strength records: {strength.get('session_count', 0)} session/set rows, total volume: {strength.get('total_volume', 0)}.",
+            f"Missing or sparse categories: {', '.join(missing) if missing else 'none obvious'}.",
         ]
         next_actions = [
             "Pick one consistency target for the next week, such as 3 active days or one short walk on non-lifting days.",
-            "Keep strength sessions if they are helping, but add easy aerobic work if active minutes are below the weekly guideline target.",
+            "Use strength volume and exercise trends from imports as context, but avoid changing too many variables at once.",
             "Use soreness, sleep quality, and energy as guardrails; do not chase more volume when recovery is poor.",
         ]
 
     memory_content = (
-        f"Google Health review over {period_days} day(s): {round(active_minutes, 1)} active minutes "
-        f"across {active_days} active day(s), with top activities {', '.join(top_types) if top_types else 'unclear'}."
+        f"Health review over {period_days} day(s): sources {', '.join(data_sources)}, {round(active_minutes, 1)} active minutes "
+        f"across {active_days} active day(s), strength volume {strength.get('total_volume', 0)}, "
+        f"sleep sessions {sleep.get('session_count', 0)}."
     )
     return {
-        "workflow": "google_health_coach_review",
+        "workflow": "health_coach_review",
         "period_days": period_days,
-        "data_sources": ["google_health"],
-        "summary": "Your recent activity review is most useful as a consistency and recovery check, not a diagnosis. The main coaching lever is to make the next week easier to execute than the last one.",
+        "data_sources": data_sources,
+        "summary": "Your recent health review is most useful as a consistency and recovery check, not a diagnosis. The main coaching lever is to use the data to make the next week easier to execute.",
         "patterns": patterns,
         "evidence_based_guidance": [
             "Use public activity guidelines as a baseline target, then personalize based on your goals and recovery.",
-            "Google Health-style coaching is strongest when wearable data is combined with personal goals, memory, and recent context.",
+            "Wearable and app coaching is strongest when activity, sleep, nutrition, training, goals, and memory are reviewed together.",
             "This guidance is coach inference from your records plus cited public guidance, not medical advice.",
         ],
         "next_actions": next_actions,
@@ -203,11 +215,19 @@ def deterministic_google_health_coach_review(request: GoogleHealthCoachReviewReq
             {
                 "kind": "health_pattern",
                 "content": memory_content,
-                "source": "google_health_coach_review",
+                "source": "health_coach_review",
                 "metadata": {"period_days": period_days},
             }
         ],
         "safety_level": "wellness",
+        "sections": {
+            "activity": activity,
+            "sleep_recovery": sleep,
+            "heart_metrics": heart,
+            "nutrition": nutrition,
+            "strength_training": strength,
+            "unknown_or_missing": missing,
+        },
     }
 
 
@@ -244,24 +264,31 @@ async def cronometer_daily_review(request: CronometerReviewRequest) -> dict[str,
 
 @app.post("/workflows/google-health/coach-review")
 async def google_health_coach_review(request: GoogleHealthCoachReviewRequest) -> dict[str, Any]:
+    return await health_coach_review(request)
+
+
+@app.post("/workflows/health/coach-review")
+async def health_coach_review(request: GoogleHealthCoachReviewRequest) -> dict[str, Any]:
     review = deterministic_google_health_coach_review(request)
     if not os.getenv("OPENAI_API_KEY") or Agent is None:
         return review
 
     agent = Agent(
-        name="Google Health Wellness Coach",
+        name="Hippo Compass Health Coach",
         model=MODEL,
         instructions=(
-            "You are a wellness coach, not a medical provider. Use the supplied Google Health "
-            "activity summary, user goals, memories, and evidence pack. Do not diagnose, change "
-            "medications, or provide treatment plans. Keep advice practical, cite the supplied "
-            "sources by title, and clearly label inference."
+            "You are a wellness coach, not a medical provider. Use the supplied health summary, "
+            "goals, memories, and evidence pack. Separate activity, sleep/recovery, heart metrics, "
+            "nutrition, strength training, and missing data. Do not diagnose, change medications, "
+            "or provide treatment plans. Keep advice practical, cite the supplied sources by title, "
+            "and clearly label inference."
         ),
     )
     prompt = json.dumps(
         {
             "question": request.question,
             "activity_summary": request.activity_summary,
+            "health_summary": request.health_summary,
             "goals": request.goals,
             "active_goals": request.active_goals,
             "relevant_memories": request.relevant_memories,

@@ -1,12 +1,12 @@
-# Google Health Coach
+# Health Coach
 
-The Google Health Coach workflow turns imported Google Health exercise records into a wellness coaching review that OpenClaw can use.
+The Health Coach workflow turns imported Google/Fitbit, Hevy, Cronometer, typed health summaries, goals, and memory into a wellness coaching review that OpenClaw can use.
 
 ## Architecture
 
 - OpenClaw calls `skills/health-coach`.
-- The skill calls `assistant-api` at `/workflows/google-health/coach-review`.
-- `assistant-api` syncs Google Health, aggregates recent exercise records, loads health memories and active health goals, then calls LangGraph.
+- The skill calls `assistant-api` at `/workflows/health/coach-review`.
+- `assistant-api` syncs Google Health when requested, loads typed health summaries/sessions, loads health memories and active health goals, then calls LangGraph.
 - LangGraph attaches a curated evidence pack and calls the specialist service.
 - The specialist returns summary, patterns, evidence-based guidance, next actions, questions, citations, memory candidates, and a safety level.
 - `assistant-api` stores the recommendation and memory candidates in Postgres.
@@ -19,17 +19,17 @@ OpenClaw does not store Google OAuth credentials, read Postgres directly, or rea
 curl -X POST \
   -H "Content-Type: application/json" \
   -H "X-Assistant-API-Key: YOUR_ASSISTANT_API_KEY" \
-  -d '{"period_days":7,"force_sync":true,"question":"Review my health this week and tell me what to improve next.","goals":{}}' \
-  http://localhost:8080/workflows/google-health/coach-review
+  -d '{"period_days":7,"force_sync":true,"question":"Review my sleep, recovery, activity, nutrition, and training this week.","goals":{}}' \
+  http://localhost:8080/workflows/health/coach-review
 ```
 
 Response shape:
 
 ```json
 {
-  "workflow": "google_health_coach_review",
+  "workflow": "health_coach_review",
   "period_days": 7,
-  "data_sources": ["google_health"],
+  "data_sources": ["google_health", "hevy", "cronometer"],
   "summary": "...",
   "patterns": ["..."],
   "evidence_based_guidance": ["..."],
@@ -49,9 +49,9 @@ HIPPO_COMPASS_API_URL=http://assistant-api:8080 HIPPO_COMPASS_API_KEY=YOUR_ASSIS
 
 Useful prompts:
 
-- "Review my health this week and tell me what to improve next."
-- "What should I do tomorrow based on my workouts?"
-- "Summarize my recent Google Health activity."
+- "Review my sleep, recovery, activity, nutrition, and training this week."
+- "What should I do tomorrow based on my workouts and recovery?"
+- "Summarize my recent Google Health/Fitbit data."
 - "Am I being consistent enough with exercise?"
 
 ## Evidence Pack

@@ -23,7 +23,7 @@ def main() -> None:
         }
     ).encode()
     request = urllib.request.Request(
-        f"{base_url}/workflows/google-health/coach-review",
+        f"{base_url}/workflows/health/coach-review",
         data=body,
         headers={
             "Content-Type": "application/json",

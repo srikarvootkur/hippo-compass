@@ -31,6 +31,23 @@ def test_build_authorization_url_contains_required_google_health_params() -> Non
     assert query["state"] == ["state-123"]
 
 
+def test_catalog_contains_sleep_and_readonly_scopes() -> None:
+    names = {item["data_type"] for item in google_health.catalog()}
+
+    assert "exercise" in names
+    assert "sleep" in names
+    assert "heart-rate" in names
+    assert google_health.READONLY_SCOPES["sleep"].endswith(".sleep.readonly")
+
+
+def test_selected_scopes_for_data_types() -> None:
+    scopes = google_health.selected_scopes(["sleep", "heart-rate", "steps"])
+
+    assert google_health.READONLY_SCOPES["sleep"] in scopes
+    assert google_health.READONLY_SCOPES["health_metrics_and_measurements"] in scopes
+    assert google_health.READONLY_SCOPES["activity_and_fitness"] in scopes
+
+
 @pytest.mark.asyncio
 async def test_exchange_code_for_tokens_uses_google_token_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GOOGLE_HEALTH_CLIENT_ID", "client-id")
@@ -117,3 +134,27 @@ def test_parse_google_timestamp() -> None:
 
     assert parsed is not None
     assert parsed.isoformat() == "2026-06-06T03:55:04.257000+00:00"
+
+
+def test_normalize_sleep_data_point() -> None:
+    normalized = google_health.normalize_data_point(
+        "sleep",
+        {
+            "name": "users/123/dataTypes/sleep/dataPoints/abc",
+            "dataSource": {"platform": "FITBIT"},
+            "sleep": {
+                "interval": {
+                    "startTime": "2026-03-03T20:57:30Z",
+                    "endTime": "2026-03-04T04:41:30Z",
+                },
+                "summary": {"minutesAsleep": "407"},
+                "stages": [{"type": "LIGHT", "minutes": "198"}],
+            },
+        },
+    )
+
+    assert normalized["data_type"] == "sleep"
+    assert normalized["category"] == "sleep"
+    assert normalized["start_time"] == "2026-03-03T20:57:30Z"
+    assert normalized["sleep_summary"] == {"minutesAsleep": "407"}
+    assert normalized["minutes_asleep"] == "407"

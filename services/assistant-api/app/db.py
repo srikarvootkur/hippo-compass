@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 from typing import Any
 
 import asyncpg
@@ -249,6 +249,211 @@ async def upsert_source_record(pool: asyncpg.Pool, record: dict[str, Any]) -> di
         json.dumps(record["normalized_payload"]),
     )
     return dict(row)
+
+
+async def create_source_sync_run(
+    pool: asyncpg.Pool,
+    source_name: str,
+    data_types: list[str],
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO source_sync_runs (source_name, data_types, metadata)
+        VALUES ($1, $2::text[], $3::jsonb)
+        RETURNING id, source_name, data_types, status, started_at, ended_at, records_seen, records_imported, error, metadata
+        """,
+        source_name,
+        data_types,
+        json.dumps(metadata or {}),
+    )
+    return dict(row)
+
+
+async def finish_source_sync_run(
+    pool: asyncpg.Pool,
+    run_id: Any,
+    status: str,
+    records_seen: int,
+    records_imported: int,
+    error: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        UPDATE source_sync_runs
+        SET status = $2,
+            ended_at = now(),
+            records_seen = $3,
+            records_imported = $4,
+            error = $5,
+            metadata = COALESCE($6::jsonb, metadata)
+        WHERE id = $1
+        RETURNING id, source_name, data_types, status, started_at, ended_at, records_seen, records_imported, error, metadata
+        """,
+        run_id,
+        status,
+        records_seen,
+        records_imported,
+        error,
+        json.dumps(metadata) if metadata is not None else None,
+    )
+    return dict(row)
+
+
+async def upsert_health_observation(pool: asyncpg.Pool, observation: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO health_observations (
+            source_record_id,
+            source_name,
+            data_type,
+            external_id,
+            category,
+            observed_at,
+            start_time,
+            end_time,
+            value_numeric,
+            value_text,
+            unit,
+            summary
+        )
+        VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7::timestamptz, $8::timestamptz, $9, $10, $11, $12::jsonb)
+        ON CONFLICT (source_name, data_type, external_id)
+        DO UPDATE SET
+            source_record_id = excluded.source_record_id,
+            category = excluded.category,
+            observed_at = excluded.observed_at,
+            start_time = excluded.start_time,
+            end_time = excluded.end_time,
+            value_numeric = excluded.value_numeric,
+            value_text = excluded.value_text,
+            unit = excluded.unit,
+            summary = excluded.summary,
+            updated_at = now()
+        RETURNING id, source_record_id, source_name, data_type, external_id, category, observed_at, start_time, end_time, value_numeric, value_text, unit, summary, created_at, updated_at
+        """,
+        observation.get("source_record_id"),
+        observation["source_name"],
+        observation["data_type"],
+        observation["external_id"],
+        observation["category"],
+        observation.get("observed_at"),
+        observation.get("start_time"),
+        observation.get("end_time"),
+        observation.get("value_numeric"),
+        observation.get("value_text"),
+        observation.get("unit"),
+        json.dumps(observation.get("summary") or {}),
+    )
+    return dict(row)
+
+
+async def upsert_health_session(pool: asyncpg.Pool, session: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO health_sessions (
+            source_record_id,
+            source_name,
+            data_type,
+            external_id,
+            category,
+            session_type,
+            title,
+            start_time,
+            end_time,
+            metrics
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz, $10::jsonb)
+        ON CONFLICT (source_name, data_type, external_id)
+        DO UPDATE SET
+            source_record_id = excluded.source_record_id,
+            category = excluded.category,
+            session_type = excluded.session_type,
+            title = excluded.title,
+            start_time = excluded.start_time,
+            end_time = excluded.end_time,
+            metrics = excluded.metrics,
+            updated_at = now()
+        RETURNING id, source_record_id, source_name, data_type, external_id, category, session_type, title, start_time, end_time, metrics, created_at, updated_at
+        """,
+        session.get("source_record_id"),
+        session["source_name"],
+        session["data_type"],
+        session["external_id"],
+        session["category"],
+        session.get("session_type"),
+        session.get("title"),
+        session.get("start_time"),
+        session.get("end_time"),
+        json.dumps(session.get("metrics") or {}),
+    )
+    return dict(row)
+
+
+async def upsert_health_daily_summary(pool: asyncpg.Pool, summary: dict[str, Any]) -> dict[str, Any]:
+    row = await pool.fetchrow(
+        """
+        INSERT INTO health_daily_summaries (source_name, summary_date, category, metrics)
+        VALUES ($1, $2::date, $3, $4::jsonb)
+        ON CONFLICT (source_name, summary_date, category)
+        DO UPDATE SET metrics = excluded.metrics, updated_at = now()
+        RETURNING id, source_name, summary_date, category, metrics, created_at, updated_at
+        """,
+        summary["source_name"],
+        summary["summary_date"],
+        summary["category"],
+        json.dumps(summary.get("metrics") or {}),
+    )
+    return dict(row)
+
+
+async def list_health_daily_summaries(
+    pool: asyncpg.Pool,
+    since_date: Any,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    rows = await pool.fetch(
+        """
+        SELECT id, source_name, summary_date, category, metrics, created_at, updated_at
+        FROM health_daily_summaries
+        WHERE summary_date >= $1::date
+        ORDER BY summary_date DESC, category
+        LIMIT $2
+        """,
+        since_date,
+        limit,
+    )
+    results = []
+    for row in rows:
+        result = dict(row)
+        result["metrics"] = ensure_dict(result.get("metrics"))
+        results.append(result)
+    return results
+
+
+async def list_recent_health_sessions(
+    pool: asyncpg.Pool,
+    since: Any,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    rows = await pool.fetch(
+        """
+        SELECT id, source_name, data_type, external_id, category, session_type, title, start_time, end_time, metrics
+        FROM health_sessions
+        WHERE COALESCE(start_time, end_time, created_at) >= $1::timestamptz
+        ORDER BY COALESCE(start_time, end_time, created_at) DESC
+        LIMIT $2
+        """,
+        since,
+        limit,
+    )
+    results = []
+    for row in rows:
+        result = dict(row)
+        result["metrics"] = ensure_dict(result.get("metrics"))
+        results.append(result)
+    return results
 
 
 async def list_source_records(

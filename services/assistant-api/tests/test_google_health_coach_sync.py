@@ -20,7 +20,13 @@ async def test_sync_google_health_records_uses_data_type_argument(monkeypatch: p
             },
         }
 
-    async def fake_list_exercise_data_points(access_token):
+    async def fake_create_source_sync_run(pool_arg, source_name, data_types, metadata=None):
+        return {"id": "sync-run-id"}
+
+    async def fake_finish_source_sync_run(*args, **kwargs):
+        return {"id": "sync-run-id"}
+
+    async def fake_list_data_points(access_token, data_type, since=None):
         return [
             {
                 "name": "users/123/dataTypes/exercise/dataPoints/abc",
@@ -42,6 +48,7 @@ async def test_sync_google_health_records_uses_data_type_argument(monkeypatch: p
         return {
             "id": "record-id",
             "external_id": record["external_id"],
+            "record_type": record["record_type"],
             "occurred_at": datetime(2026, 6, 6, 12, tzinfo=timezone.utc),
             "normalized_payload": record["normalized_payload"],
         }
@@ -49,11 +56,21 @@ async def test_sync_google_health_records_uses_data_type_argument(monkeypatch: p
     async def fake_upsert_source_connection(*args, **kwargs):
         return {"id": "connection-id"}
 
+    async def fake_write_typed_health_rows(*args, **kwargs):
+        return None
+
+    async def fake_write_daily_summaries(*args, **kwargs):
+        return 1
+
     monkeypatch.setattr(main.db, "get_source_connection", fake_get_source_connection)
     monkeypatch.setattr(main.google_health, "is_token_expired", lambda tokens: False)
-    monkeypatch.setattr(main.google_health, "list_exercise_data_points", fake_list_exercise_data_points)
+    monkeypatch.setattr(main.google_health, "list_data_points", fake_list_data_points)
+    monkeypatch.setattr(main.db, "create_source_sync_run", fake_create_source_sync_run)
+    monkeypatch.setattr(main.db, "finish_source_sync_run", fake_finish_source_sync_run)
     monkeypatch.setattr(main.db, "upsert_source_record", fake_upsert_source_record)
     monkeypatch.setattr(main.db, "upsert_source_connection", fake_upsert_source_connection)
+    monkeypatch.setattr(main, "write_typed_health_rows", fake_write_typed_health_rows)
+    monkeypatch.setattr(main, "write_daily_summaries", fake_write_daily_summaries)
 
     records = await main.sync_google_health_records(pool, "exercise")
 

@@ -7,10 +7,11 @@ Source doc: <https://developers.google.com/health/codelabs/make-your-first-api-c
 ## What This Connector Does
 
 - Runs behind `assistant-api`.
-- Uses Google OAuth with the Google Health readonly activity/fitness scope.
+- Uses Google OAuth with selected Google Health readonly scopes.
 - Stores tokens in Postgres `source_connections`, not in OpenClaw.
 - Stores imported records in `source_records`.
-- Starts with the `exercise` data type.
+- Stores typed health observations, sessions, and daily summaries.
+- Supports a Google Health data type catalog instead of hard-coding only `exercise`.
 
 ## Google Cloud Setup
 
@@ -40,10 +41,18 @@ Source doc: <https://developers.google.com/health/codelabs/make-your-first-api-c
      https://assistant.yourdomain.com/connectors/google-health/oauth/callback
      ```
 
-6. Add the Google Health API scope:
+6. Add the Google Health API readonly scopes you plan to use. For all readable categories:
 
    ```text
    https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly
+   https://www.googleapis.com/auth/googlehealth.ecg.readonly
+   https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly
+   https://www.googleapis.com/auth/googlehealth.irn.readonly
+   https://www.googleapis.com/auth/googlehealth.location.readonly
+   https://www.googleapis.com/auth/googlehealth.nutrition.readonly
+   https://www.googleapis.com/auth/googlehealth.profile.readonly
+   https://www.googleapis.com/auth/googlehealth.settings.readonly
+   https://www.googleapis.com/auth/googlehealth.sleep.readonly
    ```
 
 ## Environment
@@ -54,7 +63,7 @@ Set these in `.env`:
 GOOGLE_HEALTH_CLIENT_ID=your-client-id
 GOOGLE_HEALTH_CLIENT_SECRET=your-client-secret
 GOOGLE_HEALTH_REDIRECT_URI=http://localhost:8080/connectors/google-health/oauth/callback
-GOOGLE_HEALTH_SCOPES=https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly
+GOOGLE_HEALTH_SCOPES=https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly https://www.googleapis.com/auth/googlehealth.sleep.readonly
 ```
 
 Use the `GOOGLE_HEALTH_` names exactly. Generic names like `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are not read by this connector.
@@ -93,7 +102,7 @@ Run sync:
 curl -X POST \
   -H "Content-Type: application/json" \
   -H "X-Assistant-API-Key: YOUR_ASSISTANT_API_KEY" \
-  -d '{"data_type":"exercise"}' \
+  -d '{"data_types":["exercise","sleep","steps","heart-rate"],"lookback_days":30}' \
   http://localhost:8080/connectors/google-health/sync
 ```
 
@@ -102,7 +111,7 @@ Expected result:
 ```json
 {
   "source_name": "google_health",
-  "record_type": "exercise",
+  "data_types": ["exercise", "sleep", "steps", "heart-rate"],
   "synced_count": 25,
   "records": [
     {
@@ -114,7 +123,7 @@ Expected result:
 }
 ```
 
-The exact count and records depend on your Google/Fitbit data. The `normalized_payload` object will contain the extracted platform, exercise type, interval, calories, distance, steps, and active zone minutes when Google provides them. Running the sync multiple times should update existing rows by `external_id`, not create duplicates.
+The exact count and records depend on your Google/Fitbit data. Running the sync multiple times should update existing rows by `external_id`, not create duplicates.
 
 ## Stored Data
 
@@ -122,13 +131,13 @@ Imported records use:
 
 ```text
 source_name = google_health
-record_type = exercise
+record_type = Google Health data type, such as exercise, sleep, steps, heart-rate
 external_id = Google Health data point name
 raw_payload = full Google Health API data point
-normalized_payload = selected exercise fields
+normalized_payload = selected fields plus data type/category/interval/sample/session metadata
 ```
 
-Normalized fields include platform, recording method, exercise type, interval, calories, distance, steps, and active zone minutes.
+Typed facts are also written to `health_observations`, `health_sessions`, and `health_daily_summaries`.
 
 Google timestamps arrive as strings such as `2026-06-06T03:55:04.257Z`; the API parses them before writing to Postgres. If you see an asyncpg error saying it expected a datetime but got a string, rebuild/restart `assistant-api` with the latest code:
 

@@ -16,7 +16,7 @@ Implemented specialist endpoints:
 
 ```text
 POST /workflows/cronometer/daily-review
-POST /workflows/google-health/coach-review
+POST /workflows/health/coach-review
 ```
 
 Mock mode works without an OpenAI API key. Real agent mode uses `OPENAI_API_KEY` and `OPENAI_MODEL`.

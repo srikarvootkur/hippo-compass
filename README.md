@@ -33,6 +33,7 @@ The assistant can use OpenAI, OpenClaw, Claude, Gemini, Codex, or something else
 - **Redis** for background jobs and queues.
 - **Caddy** for HTTPS.
 - **Google Health API connector** for read-only Fitbit-backed activity/fitness imports.
+- **Health Data Layer** for Google/Fitbit, Hevy CSV, Cronometer CSV, typed health facts, and LLM-ready daily summaries.
 
 ## Repo Layout
 
@@ -49,6 +50,7 @@ services/
   mac-bridge/          Future local-only Mac/iMessage bridge
 skills/                OpenClaw workspace skills that call the assistant API
 templates/             Starter templates for new OpenClaw skills
+tools/                 CLI helpers such as hippo-health
 db/migrations/         Postgres and pgvector schema
 prompts/               Starting prompts
 runbooks/              Ops notes and future migration guides
@@ -262,7 +264,7 @@ Minimum endpoints:
 - `POST /approvals`
 - `POST /tool_runs`
 - `POST /workflows/cronometer/daily-review`
-- `POST /workflows/google-health/coach-review`
+- `POST /workflows/health/coach-review`
 
 Use this header:
 
@@ -392,21 +394,22 @@ git push -u origin main
 
 ## Google Health Connector
 
-The Google Health connector is the first real health-data import path. It uses OAuth, stores tokens in Postgres, and imports `exercise` data points into `source_records`.
+The Google Health connector is the first real health-data import path. It uses OAuth, stores tokens in Postgres, and imports selected Google Health data types into `source_records` plus typed health tables.
 
 See [docs/google-health-connector.md](docs/google-health-connector.md).
+See [docs/health-data-layer.md](docs/health-data-layer.md) for the CLI-first public setup flow.
 
 The connector currently supports:
 
 - OAuth start/callback/status
 - access-token refresh through the saved refresh token
-- read-only `exercise` data point sync
+- read-only Google Health data type catalog and configurable sync
 - idempotent upsert into `source_records`
-- normalized exercise fields for later LangGraph summaries
+- typed observations, sessions, and daily summaries for later LangGraph summaries
 
 ## Google Health Coach
 
-The Google Health Coach workflow exposes a single OpenClaw skill for wellness coaching from Google Health data. It syncs Google Health, summarizes recent exercise records, loads health goals/memory, applies a curated evidence pack, and stores the resulting recommendation/memory candidates.
+The Health Coach workflow exposes a single OpenClaw skill for wellness coaching from Google/Fitbit, Hevy, Cronometer, typed health summaries, goals, and memory. It stores the resulting recommendation/memory candidates.
 
 Example:
 

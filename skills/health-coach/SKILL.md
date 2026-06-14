@@ -1,6 +1,6 @@
 ---
 name: health-coach
-description: "Review Google Health/Fitbit activity through Hippo Compass for wellness coaching, workout consistency, exercise summaries, and health next actions."
+description: "Review Google Health/Fitbit, Hevy, Cronometer, and typed Hippo Compass health data for wellness coaching, recovery, nutrition, strength, activity, and next actions."
 metadata:
   {
     "openclaw":
@@ -12,7 +12,7 @@ metadata:
 
 # Hippo Compass Health Coach
 
-Use this skill when the user asks for a Google Health/Fitbit activity review, wellness coaching, workout consistency advice, or a summary of recent health data.
+Use this skill when the user asks for a health data review, Google Health/Fitbit review, sleep/recovery summary, strength training review, nutrition pattern review, workout consistency advice, or next health actions.
 
 ## Inputs
 
@@ -27,8 +27,8 @@ Use this skill when the user asks for a Google Health/Fitbit activity review, we
 
 ## Behavior
 
-1. Call `/workflows/google-health/coach-review`.
-2. Let Hippo Compass sync Google Health and load memory/goals.
+1. Call `/workflows/health/coach-review`.
+2. Let Hippo Compass sync Google Health, load typed health summaries, and load memory/goals.
 3. Return the summary, patterns, next actions, and citations.
 4. Clearly treat the output as wellness coaching, not medical diagnosis.
 

@@ -419,7 +419,7 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -H "X-Assistant-API-Key: YOUR_ASSISTANT_API_KEY" \
   -d '{"period_days":7,"force_sync":true,"question":"Review my health this week and tell me what to improve next.","goals":{}}' \
-  http://localhost:8080/workflows/google-health/coach-review
+  http://localhost:8080/workflows/health/coach-review
 ```
 
 ## Maintenance Commands

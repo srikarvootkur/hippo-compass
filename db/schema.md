@@ -6,6 +6,10 @@ Core tables:
 
 - `source_connections`: connector configuration state.
 - `source_records`: raw and normalized records from external apps.
+- `source_sync_runs`: sync attempts, imported counts, and connector errors.
+- `health_observations`: typed samples, intervals, and daily values for LLM-friendly health queries.
+- `health_sessions`: typed exercise, sleep, ECG, hydration, and other session-like records.
+- `health_daily_summaries`: daily rollups optimized for coaching, retrieval, and summaries.
 - `memories`: semantic memories, preferences, goals, style notes, and embeddings.
 - `goals`: active and historical user goals.
 - `journal_entries`: life notes and reflections.

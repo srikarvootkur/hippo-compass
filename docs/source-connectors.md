@@ -2,7 +2,7 @@
 
 Recommended order:
 
-1. Google Health API for Fitbit-backed activity/fitness data.
+1. Google Health API for Fitbit-backed health data.
 2. Google Calendar and Tasks.
 3. Cronometer export/API.
 4. Hevy.
@@ -31,18 +31,19 @@ Use LangGraph for connectors that need durable state, retries, or approval check
 
 ## Google Health API
 
-The first health connector is Google Health API with the readonly activity/fitness scope:
+The first health connector is Google Health API with readonly scopes for activity/fitness, sleep, health metrics, nutrition, profile, settings, ECG, IRN, and location:
 
 ```text
-https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly
+python3 tools/hippo_health.py google catalog
 ```
 
 See `docs/google-health-connector.md`.
+See `docs/health-data-layer.md`.
 
 The first consumer workflow is the Google Health Coach:
 
 ```text
-POST /workflows/google-health/coach-review
+POST /workflows/health/coach-review
 ```
 
 See `docs/google-health-coach.md`.

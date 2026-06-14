@@ -40,6 +40,9 @@ services:
       context: ../services/workers
     env_file:
       - ../.env
+    environment:
+      HIPPO_COMPASS_API_URL: ${HIPPO_COMPASS_API_URL:-http://assistant-api:8080}
+      HIPPO_COMPASS_API_KEY: ${HIPPO_COMPASS_API_KEY:-change-me-local-dev}
     depends_on:
       - redis
       - assistant-api

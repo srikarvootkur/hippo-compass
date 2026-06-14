@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from app import db
 from app import google_health
+from app import health_ingest
 from app import health_coach
 
 
@@ -95,14 +96,36 @@ class CronometerReviewRequest(BaseModel):
 
 
 class GoogleHealthSyncRequest(BaseModel):
-    data_type: str = Field(default="exercise", pattern="^exercise$")
+    data_type: Optional[str] = None
+    data_types: list[str] = Field(default_factory=list)
+    lookback_days: int = Field(default=30, ge=1, le=3650)
+
+
+class GoogleHealthConfigureRequest(BaseModel):
+    selected_data_types: list[str] = Field(default_factory=google_health.all_data_type_names)
+    sync_schedule: str = Field(default="manual", pattern="^(manual|daily|weekly|off)$")
+
+
+class CsvImportRequest(BaseModel):
+    source: str = Field(..., pattern="^(hevy|cronometer)$")
+    file_path: str
 
 
 class GoogleHealthCoachReviewRequest(BaseModel):
     period_days: int = Field(default=7, ge=1, le=90)
     force_sync: bool = True
     question: str = Field(
-        default="Review my recent Google Health activity and tell me what to improve next.",
+        default="Review my recent Google Health data and tell me what to improve next.",
+        min_length=1,
+    )
+    goals: dict[str, Any] = Field(default_factory=dict)
+
+
+class UnifiedHealthCoachReviewRequest(BaseModel):
+    period_days: int = Field(default=7, ge=1, le=90)
+    force_sync: bool = True
+    question: str = Field(
+        default="Review my recent health data and tell me what to improve next.",
         min_length=1,
     )
     goals: dict[str, Any] = Field(default_factory=dict)
@@ -184,6 +207,8 @@ async def google_health_oauth_start() -> dict[str, Any]:
     state = google_health.new_oauth_state()
     existing = await db.get_source_connection(pool, google_health.SOURCE_NAME)
     existing_config = (existing or {}).get("config") or {}
+    selected_data_types = existing_config.get("selected_data_types") or google_health.all_data_type_names()
+    scopes = google_health.selected_scopes(selected_data_types)
     await db.upsert_source_connection(
         pool,
         google_health.SOURCE_NAME,
@@ -191,15 +216,21 @@ async def google_health_oauth_start() -> dict[str, Any]:
         {
             **existing_config,
             "oauth_state": state,
-            "scopes": config["scopes"],
+            "scopes": scopes,
             "redirect_uri": config["redirect_uri"],
+            "selected_data_types": selected_data_types,
         },
     )
     return {
-        "authorization_url": google_health.build_authorization_url(state, config=config),
+        "authorization_url": google_health.build_authorization_url(
+            state,
+            config={**config, "scopes": scopes},
+            data_types=selected_data_types,
+        ),
         "state": state,
         "redirect_uri": config["redirect_uri"],
-        "scopes": config["scopes"],
+        "scopes": scopes,
+        "selected_data_types": selected_data_types,
     }
 
 
@@ -239,6 +270,44 @@ async def google_health_oauth_callback(
     }
 
 
+@app.get("/connectors/google-health/catalog", dependencies=[Depends(require_api_key)])
+async def google_health_catalog() -> dict[str, Any]:
+    return {
+        "source_name": google_health.SOURCE_NAME,
+        "data_types": google_health.catalog(),
+        "readonly_scopes": google_health.READONLY_SCOPES,
+    }
+
+
+@app.post("/connectors/google-health/configure", dependencies=[Depends(require_api_key)])
+async def google_health_configure(request: GoogleHealthConfigureRequest) -> dict[str, Any]:
+    pool = require_db_pool()
+    invalid = [name for name in request.selected_data_types if name not in google_health.DATA_TYPE_BY_NAME]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Unsupported Google Health data type(s): {', '.join(invalid)}")
+    existing = await db.get_source_connection(pool, google_health.SOURCE_NAME)
+    existing_config = (existing or {}).get("config") or {}
+    scopes = google_health.selected_scopes(request.selected_data_types)
+    connection = await db.upsert_source_connection(
+        pool,
+        google_health.SOURCE_NAME,
+        (existing or {}).get("status") or "configured",
+        {
+            **existing_config,
+            "selected_data_types": request.selected_data_types,
+            "sync_schedule": request.sync_schedule,
+            "scopes": scopes,
+        },
+    )
+    return {
+        "source_name": google_health.SOURCE_NAME,
+        "status": connection["status"],
+        "selected_data_types": request.selected_data_types,
+        "sync_schedule": request.sync_schedule,
+        "scopes": scopes,
+    }
+
+
 @app.get("/connectors/google-health/status", dependencies=[Depends(require_api_key)])
 async def google_health_status() -> dict[str, Any]:
     pool = require_db_pool()
@@ -252,6 +321,8 @@ async def google_health_status() -> dict[str, Any]:
         "status": connection["status"],
         "scopes": config.get("scopes") or tokens.get("scope"),
         "redirect_uri": config.get("redirect_uri"),
+        "selected_data_types": config.get("selected_data_types") or [google_health.RECORD_TYPE_EXERCISE],
+        "sync_schedule": config.get("sync_schedule", "manual"),
         "has_refresh_token": bool(tokens.get("refresh_token")),
         "token_expires_at": tokens.get("expires_at"),
     }
@@ -260,17 +331,60 @@ async def google_health_status() -> dict[str, Any]:
 @app.post("/connectors/google-health/sync", dependencies=[Depends(require_api_key)])
 async def google_health_sync(request: GoogleHealthSyncRequest) -> dict[str, Any]:
     pool = require_db_pool()
-    records = await sync_google_health_records(pool, request.data_type)
-    return serialize_google_health_sync(records, request.data_type)
+    data_types = request.data_types or ([request.data_type] if request.data_type else None)
+    result = await sync_google_health_data(pool, data_types=data_types, lookback_days=request.lookback_days)
+    return result
 
 
-async def sync_google_health_records(pool: Any, data_type: str = google_health.RECORD_TYPE_EXERCISE) -> list[dict[str, Any]]:
+def data_types_for_sync(connection: dict[str, Any], data_types: list[str] | None) -> list[str]:
+    if data_types:
+        selected = data_types
+    else:
+        config = connection.get("config") or {}
+        selected = config.get("selected_data_types") or [google_health.RECORD_TYPE_EXERCISE]
+    invalid = [name for name in selected if name not in google_health.DATA_TYPE_BY_NAME]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Unsupported Google Health data type(s): {', '.join(invalid)}")
+    return selected
+
+
+async def write_typed_health_rows(pool: Any, record: dict[str, Any]) -> None:
+    observation, session = health_ingest.source_record_to_typed_rows(record)
+    if observation:
+        await db.upsert_health_observation(pool, observation)
+    if session:
+        await db.upsert_health_session(pool, session)
+
+
+async def write_daily_summaries(pool: Any, records: list[dict[str, Any]]) -> int:
+    count = 0
+    for summary in health_ingest.summarize_normalized_records(records):
+        await db.upsert_health_daily_summary(pool, summary)
+        count += 1
+    return count
+
+
+async def sync_google_health_data(
+    pool: Any,
+    data_types: list[str] | None = None,
+    lookback_days: int = 30,
+) -> dict[str, Any]:
     connection = await db.get_source_connection(pool, google_health.SOURCE_NAME)
-    if not connection or connection["status"] != "active":
+    if not connection or connection["status"] not in {"active", "configured", "oauth_pending"}:
         raise HTTPException(status_code=400, detail="Google Health connector is not active")
-    config = connection.get("config") or {}
-    tokens = config.get("tokens") or {}
+    selected_data_types = data_types_for_sync(connection, data_types)
+    run = await db.create_source_sync_run(
+        pool,
+        google_health.SOURCE_NAME,
+        selected_data_types,
+        {"lookback_days": lookback_days},
+    )
+    imported_records: list[dict[str, Any]] = []
+    failures: dict[str, str] = {}
+    seen = 0
     try:
+        config = connection.get("config") or {}
+        tokens = config.get("tokens") or {}
         if google_health.is_token_expired(tokens):
             tokens = await google_health.refresh_access_token(tokens)
             await db.upsert_source_connection(
@@ -279,31 +393,73 @@ async def sync_google_health_records(pool: Any, data_type: str = google_health.R
                 "active",
                 {**config, "tokens": tokens},
             )
-        if data_type != google_health.RECORD_TYPE_EXERCISE:
-            raise ValueError(f"Unsupported Google Health data type: {data_type}")
-        data_points = await google_health.list_exercise_data_points(tokens["access_token"])
-    except (httpx.HTTPError, KeyError, ValueError) as exc:
-        raise HTTPException(status_code=502, detail=f"Google Health sync failed: {exc}") from exc
-
-    records = []
-    for point in data_points:
-        normalized = google_health.normalize_exercise_data_point(point)
-        external_id = normalized.get("name")
-        if not external_id:
-            continue
-        record = await db.upsert_source_record(
+        since = datetime.now(UTC) - timedelta(days=lookback_days)
+        for data_type in selected_data_types:
+            try:
+                points = await google_health.list_data_points(tokens["access_token"], data_type, since=since)
+            except (httpx.HTTPError, KeyError, ValueError) as exc:
+                failures[data_type] = str(exc)
+                continue
+            seen += len(points)
+            for point in points:
+                normalized = google_health.normalize_data_point(data_type, point)
+                external_id = normalized.get("name")
+                if not external_id:
+                    continue
+                record = await db.upsert_source_record(
+                    pool,
+                    {
+                        "source_name": google_health.SOURCE_NAME,
+                        "external_id": external_id,
+                        "record_type": data_type,
+                        "occurred_at": google_health.occurred_at(normalized),
+                        "raw_payload": point,
+                        "normalized_payload": normalized,
+                    },
+                )
+                imported_records.append(record)
+                await write_typed_health_rows(pool, record)
+        daily_summary_count = await write_daily_summaries(pool, imported_records)
+        status = "partial" if failures else "success"
+        await db.finish_source_sync_run(
             pool,
-            {
-                "source_name": google_health.SOURCE_NAME,
-                "external_id": external_id,
-                "record_type": data_type,
-                "occurred_at": google_health.parse_google_timestamp(normalized.get("start_time")),
-                "raw_payload": point,
-                "normalized_payload": normalized,
-            },
+            run["id"],
+            status,
+            seen,
+            len(imported_records),
+            metadata={"failures": failures, "daily_summary_count": daily_summary_count},
         )
-        records.append(record)
-    return records
+        return {
+            "source_name": google_health.SOURCE_NAME,
+            "status": status,
+            "data_types": selected_data_types,
+            "synced_count": len(imported_records),
+            "records_seen": seen,
+            "daily_summary_count": daily_summary_count,
+            "failures": failures,
+            "records": serialize_source_records(imported_records),
+        }
+    except Exception as exc:
+        await db.finish_source_sync_run(pool, run["id"], "error", seen, len(imported_records), error=str(exc))
+        raise
+
+
+async def sync_google_health_records(pool: Any, data_type: str = google_health.RECORD_TYPE_EXERCISE) -> list[dict[str, Any]]:
+    result = await sync_google_health_data(pool, data_types=[data_type])
+    return result.get("records", [])
+
+
+def serialize_source_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": str(record["id"]),
+            "external_id": record["external_id"],
+            "record_type": record.get("record_type"),
+            "occurred_at": record["occurred_at"].isoformat() if record.get("occurred_at") else None,
+            "normalized_payload": db.ensure_dict(record["normalized_payload"]),
+        }
+        for record in records
+    ]
 
 
 def serialize_google_health_sync(records: list[dict[str, Any]], data_type: str) -> dict[str, Any]:
@@ -405,6 +561,122 @@ async def google_health_coach_review(request: GoogleHealthCoachReviewRequest) ->
 
     return {
         **review,
+        "created_recommendation_id": str(created_recommendation["id"]),
+        "created_memory_ids": [str(memory["id"]) for memory in created_memories],
+    }
+
+
+@app.post("/connectors/csv/import", dependencies=[Depends(require_api_key)])
+async def import_health_csv(request: CsvImportRequest) -> dict[str, Any]:
+    pool = require_db_pool()
+    rows = health_ingest.read_csv_rows(request.file_path)
+    records = []
+    for row in rows:
+        normalized = health_ingest.normalize_csv_row(request.source, row)
+        external_id = health_ingest.stable_external_id(request.source, row)
+        record = await db.upsert_source_record(
+            pool,
+            {
+                "source_name": request.source,
+                "external_id": external_id,
+                "record_type": normalized["data_type"],
+                "occurred_at": health_ingest.parse_datetime(normalized.get("observed_at") or normalized.get("start_time")),
+                "raw_payload": row,
+                "normalized_payload": normalized,
+            },
+        )
+        records.append(record)
+        await write_typed_health_rows(pool, record)
+    daily_summary_count = await write_daily_summaries(pool, records)
+    return {
+        "source_name": request.source,
+        "imported_count": len(records),
+        "daily_summary_count": daily_summary_count,
+        "records": serialize_source_records(records),
+    }
+
+
+@app.post("/workflows/health/coach-review", dependencies=[Depends(require_api_key)])
+async def unified_health_coach_review(request: UnifiedHealthCoachReviewRequest) -> dict[str, Any]:
+    pool = require_db_pool()
+    if request.force_sync:
+        await sync_google_health_data(pool)
+
+    since = datetime.now(UTC) - timedelta(days=request.period_days)
+    since_date = since.date().isoformat()
+    daily_summaries = await db.list_health_daily_summaries(pool, since_date)
+    sessions = await db.list_recent_health_sessions(pool, since)
+    health_summary = health_ingest.build_health_summary(daily_summaries, sessions, request.period_days)
+    memories = await db.search_memories(
+        pool,
+        "health fitness exercise workout recovery sleep nutrition goals consistency",
+        8,
+        {},
+    )
+    active_goals = await db.list_active_goals(pool, category="health", limit=10)
+    workflow_request = {
+        "period_days": request.period_days,
+        "question": request.question,
+        "goals": request.goals,
+        "active_goals": [
+            {
+                "id": str(goal["id"]),
+                "name": goal["name"],
+                "category": goal["category"],
+                "target": goal["target"],
+                "notes": goal.get("notes"),
+            }
+            for goal in active_goals
+        ],
+        "relevant_memories": [
+            {
+                "id": str(memory["id"]),
+                "kind": memory["kind"],
+                "content": memory["content"],
+                "source": memory["source"],
+                "metadata": db.ensure_dict(memory.get("metadata")),
+            }
+            for memory in memories
+        ],
+        "health_summary": health_summary,
+        "activity_summary": health_summary.get("activity", {}),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            response = await client.post(
+                f"{LANGGRAPH_WORKFLOWS_URL}/workflows/health/coach-review",
+                json=workflow_request,
+            )
+            response.raise_for_status()
+            review = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Health coach workflow failed: {exc}") from exc
+
+    recommendation = review.get("recommendation") or {
+        "title": "Review health coach summary",
+        "body": review.get("summary", ""),
+        "reason": "Generated from unified health coach review.",
+        "metadata": {"workflow": "health_coach_review"},
+    }
+    created_recommendation = await db.insert_recommendation(pool, recommendation)
+    created_memories = []
+    for memory in review.get("memory_candidates") or []:
+        if memory.get("content"):
+            created_memories.append(
+                await db.insert_memory(
+                    pool,
+                    {
+                        "kind": memory.get("kind", "health_pattern"),
+                        "content": memory["content"],
+                        "source": memory.get("source", "health_coach_review"),
+                        "metadata": memory.get("metadata") or {"period_days": request.period_days},
+                    },
+                )
+            )
+
+    return {
+        **review,
+        "health_summary": health_summary,
         "created_recommendation_id": str(created_recommendation["id"]),
         "created_memory_ids": [str(memory["id"]) for memory in created_memories],
     }

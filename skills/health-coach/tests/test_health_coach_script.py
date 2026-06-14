@@ -52,7 +52,7 @@ def test_health_coach_script_posts_expected_request(monkeypatch, capsys) -> None
 
     module.main()
 
-    assert seen["url"] == "http://assistant-api:8080/workflows/google-health/coach-review"
+    assert seen["url"] == "http://assistant-api:8080/workflows/health/coach-review"
     assert seen["headers"]["X-assistant-api-key"] == "secret"
     assert seen["body"]["period_days"] == 14
     assert seen["body"]["force_sync"] is True

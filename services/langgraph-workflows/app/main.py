@@ -36,6 +36,7 @@ class GoogleHealthCoachReviewRequest(BaseModel):
     active_goals: list[dict[str, Any]] = Field(default_factory=list)
     relevant_memories: list[dict[str, Any]] = Field(default_factory=list)
     activity_summary: dict[str, Any] = Field(default_factory=dict)
+    health_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class DailyReviewState(TypedDict, total=False):
@@ -140,7 +141,7 @@ def attach_health_evidence(state: HealthCoachState) -> HealthCoachState:
 async def call_health_specialist(state: HealthCoachState) -> HealthCoachState:
     async with httpx.AsyncClient(timeout=90) as client:
         response = await client.post(
-            f"{AGENTS_WORKFLOWS_URL}/workflows/google-health/coach-review",
+            f"{AGENTS_WORKFLOWS_URL}/workflows/health/coach-review",
             json={**state["request"], "evidence_pack": state["evidence_pack"]},
         )
         response.raise_for_status()
@@ -153,11 +154,11 @@ def prepare_health_outputs(state: HealthCoachState) -> HealthCoachState:
     state["safety_level"] = review.get("safety_level", "wellness")
     next_actions = review.get("next_actions") or []
     state["recommendation"] = {
-        "title": "Review Google Health coach summary",
+        "title": "Review health coach summary",
         "body": " ".join(next_actions) if next_actions else review.get("summary", ""),
-        "reason": f"Generated from Google Health activity over {review.get('period_days')} day(s).",
+        "reason": f"Generated from health data over {review.get('period_days')} day(s).",
         "metadata": {
-            "workflow": "google_health_coach_review",
+            "workflow": review.get("workflow", "health_coach_review"),
             "data_sources": review.get("data_sources", ["google_health"]),
             "safety_level": state["safety_level"],
             "citations": review.get("citations") or [],
@@ -200,6 +201,11 @@ async def cronometer_daily_review(request: CronometerReviewRequest) -> dict[str,
 
 @app.post("/workflows/google-health/coach-review")
 async def google_health_coach_review(request: GoogleHealthCoachReviewRequest) -> dict[str, Any]:
+    return await health_coach_review(request)
+
+
+@app.post("/workflows/health/coach-review")
+async def health_coach_review(request: GoogleHealthCoachReviewRequest) -> dict[str, Any]:
     initial_state: HealthCoachState = {"request": request.model_dump()}
     if StateGraph is None:
         state = attach_health_evidence(initial_state)
@@ -211,7 +217,7 @@ async def google_health_coach_review(request: GoogleHealthCoachReviewRequest) ->
     review = state["coach_review"]
     return {
         "workflow_engine": "langgraph",
-        "workflow": "google_health_coach_review",
+        "workflow": review.get("workflow", "health_coach_review"),
         "period_days": review.get("period_days", request.period_days),
         "data_sources": review.get("data_sources", ["google_health"]),
         "summary": review.get("summary", ""),
@@ -222,6 +228,7 @@ async def google_health_coach_review(request: GoogleHealthCoachReviewRequest) ->
         "citations": review.get("citations", []),
         "safety_level": state["safety_level"],
         "activity_summary": request.activity_summary,
+        "health_summary": request.health_summary,
         "recommendation": state["recommendation"],
         "memory_candidates": state["memory_candidates"],
     }

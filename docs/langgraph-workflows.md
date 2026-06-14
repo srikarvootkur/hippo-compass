@@ -25,12 +25,12 @@ It exposes:
 ```text
 GET /health
 POST /workflows/cronometer/daily-review
-POST /workflows/google-health/coach-review
+POST /workflows/health/coach-review
 ```
 
 The Cronometer workflow currently calls the OpenAI Agents SDK specialist service, then wraps the result as a durable workflow output with recommendation and memory candidates.
 
-The Google Health coach workflow attaches a curated evidence pack, calls the specialist service, and returns wellness coaching with citations, safety level, recommendation, and memory candidates.
+The health coach workflow attaches a curated evidence pack, calls the specialist service, and returns wellness coaching with citations, safety level, recommendation, and memory candidates.
 
 ## Design Rule
 
