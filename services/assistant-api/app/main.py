@@ -386,7 +386,31 @@ async def sync_google_health_data(
         config = connection.get("config") or {}
         tokens = config.get("tokens") or {}
         if google_health.is_token_expired(tokens):
-            tokens = await google_health.refresh_access_token(tokens)
+            try:
+                tokens = await google_health.refresh_access_token(tokens)
+            except httpx.HTTPStatusError as exc:
+                await db.finish_source_sync_run(
+                    pool,
+                    run["id"],
+                    "failed",
+                    0,
+                    0,
+                    error="Google Health token refresh failed; reauthorize the connector.",
+                )
+                raise HTTPException(
+                    status_code=401,
+                    detail="Google Health token refresh failed. Reauthorize Google Health, especially if you changed selected data types or scopes.",
+                ) from exc
+            except ValueError as exc:
+                await db.finish_source_sync_run(
+                    pool,
+                    run["id"],
+                    "failed",
+                    0,
+                    0,
+                    error=str(exc),
+                )
+                raise HTTPException(status_code=401, detail=str(exc)) from exc
             await db.upsert_source_connection(
                 pool,
                 google_health.SOURCE_NAME,
