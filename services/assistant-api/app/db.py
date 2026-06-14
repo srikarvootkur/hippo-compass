@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date
 from typing import Any
 
 import asyncpg
@@ -15,6 +16,12 @@ def ensure_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
         return json.loads(value)
     return dict(value)
+
+
+def ensure_date(value: Any) -> date:
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
 
 
 async def create_pool() -> asyncpg.Pool | None:
@@ -401,7 +408,7 @@ async def upsert_health_daily_summary(pool: asyncpg.Pool, summary: dict[str, Any
         RETURNING id, source_name, summary_date, category, metrics, created_at, updated_at
         """,
         summary["source_name"],
-        summary["summary_date"],
+        ensure_date(summary["summary_date"]),
         summary["category"],
         json.dumps(summary.get("metrics") or {}),
     )
