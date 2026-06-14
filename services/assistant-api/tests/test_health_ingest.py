@@ -26,6 +26,8 @@ def test_source_record_to_typed_rows_creates_sleep_session() -> None:
     assert session is not None
     assert session["data_type"] == "sleep"
     assert session["category"] == "sleep"
+    assert isinstance(session["start_time"], datetime)
+    assert isinstance(session["end_time"], datetime)
     assert session["metrics"]["sleep_summary"] == {"minutesAsleep": "407"}
 
 
@@ -51,6 +53,8 @@ def test_source_record_to_typed_rows_accepts_json_string_payload() -> None:
     assert session is None
     assert observation is not None
     assert observation["data_type"] == "steps"
+    assert isinstance(observation["observed_at"], datetime)
+    assert isinstance(observation["start_time"], datetime)
     assert observation["value_numeric"] == 1200
 
 

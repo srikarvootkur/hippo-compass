@@ -79,8 +79,8 @@ def source_record_to_typed_rows(record: dict[str, Any]) -> tuple[dict[str, Any] 
             "category": category,
             "session_type": normalized.get("exercise_type") or normalized.get("session_type") or normalized.get("type"),
             "title": normalized.get("display_name") or normalized.get("title") or normalized.get("exercise_name"),
-            "start_time": normalized.get("start_time") or normalized.get("observed_at"),
-            "end_time": normalized.get("end_time"),
+            "start_time": parse_datetime(normalized.get("start_time") or normalized.get("observed_at")),
+            "end_time": parse_datetime(normalized.get("end_time")),
             "metrics": normalized,
         }
 
@@ -96,9 +96,9 @@ def source_record_to_typed_rows(record: dict[str, Any]) -> tuple[dict[str, Any] 
         "data_type": data_type,
         "external_id": external_id,
         "category": category,
-        "observed_at": normalized.get("observed_at") or normalized.get("sample_time") or normalized.get("start_time"),
-        "start_time": normalized.get("start_time"),
-        "end_time": normalized.get("end_time"),
+        "observed_at": parse_datetime(normalized.get("observed_at") or normalized.get("sample_time") or normalized.get("start_time")),
+        "start_time": parse_datetime(normalized.get("start_time")),
+        "end_time": parse_datetime(normalized.get("end_time")),
         "value_numeric": value_numeric,
         "value_text": normalized.get("value_text"),
         "unit": unit,
