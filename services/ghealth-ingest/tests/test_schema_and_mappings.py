@@ -38,3 +38,9 @@ def test_empty_cli_envelope_is_a_valid_zero_row_page(monkeypatch) -> None:
     monkeypatch.setattr(worker, "command", lambda *args, **kwargs: {})
     response = worker.fetch_page("sleep", "list", worker.date(2026, 7, 18), worker.date(2026, 7, 24), None)
     assert response == {"dataPoints": []}
+
+
+def test_null_data_points_is_a_valid_zero_row_page(monkeypatch) -> None:
+    monkeypatch.setattr(worker, "command", lambda *args, **kwargs: {"dataPoints": None})
+    response = worker.fetch_page("sleep", "list", worker.date(2026, 5, 24), worker.date(2026, 5, 30), None)
+    assert response == {"dataPoints": []}

@@ -151,6 +151,11 @@ def fetch_page(data_type: str, operation: str, start: date, end: date, page_toke
     response = command(*args, timeout=300)
     rows_key = expected_rows_key(operation)
     rows = response.get(rows_key)
+    # Google Health can represent a no-data list as {"dataPoints": null}.
+    # Normalize that explicit empty value before applying the schema gate.
+    if rows is None and rows_key in response and response[rows_key] is None:
+        response[rows_key] = []
+        rows = response[rows_key]
     # The CLI preserves normal raw envelopes, but an API no-data response can
     # be normalized to {} (or hints only). Treat only that narrow shape as an
     # empty page; any real, unfamiliar payload remains a schema error.
