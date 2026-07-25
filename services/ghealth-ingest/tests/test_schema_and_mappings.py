@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from app.schema import INITIAL_TYPES, expected_rows_key
+from app import worker
 from app.worker import civil_date, point_coordinates, point_identity, source_of
 
 
@@ -31,3 +32,9 @@ def test_verified_raw_mappings() -> None:
 def test_unknown_shape_can_still_have_a_stable_raw_identity() -> None:
     point = {"newGoogleField": {"value": 1}}
     assert point_identity("heart-rate", point).startswith("ghealth:heart-rate:")
+
+
+def test_empty_cli_envelope_is_a_valid_zero_row_page(monkeypatch) -> None:
+    monkeypatch.setattr(worker, "command", lambda *args, **kwargs: {})
+    response = worker.fetch_page("sleep", "list", worker.date(2026, 7, 18), worker.date(2026, 7, 24), None)
+    assert response == {"dataPoints": []}

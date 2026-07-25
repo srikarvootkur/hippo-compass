@@ -151,6 +151,12 @@ def fetch_page(data_type: str, operation: str, start: date, end: date, page_toke
     response = command(*args, timeout=300)
     rows_key = expected_rows_key(operation)
     rows = response.get(rows_key)
+    # The CLI preserves normal raw envelopes, but an API no-data response can
+    # be normalized to {} (or hints only). Treat only that narrow shape as an
+    # empty page; any real, unfamiliar payload remains a schema error.
+    if rows is None and (not response or set(response).issubset({"_hints"})):
+        response[rows_key] = []
+        rows = response[rows_key]
     if not isinstance(rows, list):
         raise GHealthError(f"ghealth {data_type} {operation} response lacks {rows_key}")
     if "nextPageToken" in response and not isinstance(response["nextPageToken"], str):
