@@ -199,6 +199,7 @@ async def create_journal_entry(journal: JournalEntryCreate) -> dict[str, Any]:
 
 @app.get("/connectors/google-health/oauth/start", dependencies=[Depends(require_api_key)])
 async def google_health_oauth_start() -> dict[str, Any]:
+    raise HTTPException(status_code=410, detail="Google Health OAuth is managed by ghealth-ingest; see docs/ghealth-ingestion.md")
     pool = require_db_pool()
     try:
         config = google_health.require_settings()
@@ -240,6 +241,7 @@ async def google_health_oauth_callback(
     state: Optional[str] = Query(default=None),
     error: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
+    raise HTTPException(status_code=410, detail="Google Health OAuth is managed by ghealth-ingest")
     if error:
         raise HTTPException(status_code=400, detail=f"Google OAuth error: {error}")
     if not code or not state:
@@ -272,6 +274,7 @@ async def google_health_oauth_callback(
 
 @app.get("/connectors/google-health/catalog", dependencies=[Depends(require_api_key)])
 async def google_health_catalog() -> dict[str, Any]:
+    raise HTTPException(status_code=410, detail="Use ghealth schema types; the direct Google Health connector is retired")
     return {
         "source_name": google_health.SOURCE_NAME,
         "data_types": google_health.catalog(),
@@ -281,6 +284,7 @@ async def google_health_catalog() -> dict[str, Any]:
 
 @app.post("/connectors/google-health/configure", dependencies=[Depends(require_api_key)])
 async def google_health_configure(request: GoogleHealthConfigureRequest) -> dict[str, Any]:
+    raise HTTPException(status_code=410, detail="Configure ghealth-ingest through its readonly OAuth profile")
     pool = require_db_pool()
     invalid = [name for name in request.selected_data_types if name not in google_health.DATA_TYPE_BY_NAME]
     if invalid:
@@ -310,6 +314,7 @@ async def google_health_configure(request: GoogleHealthConfigureRequest) -> dict
 
 @app.get("/connectors/google-health/status", dependencies=[Depends(require_api_key)])
 async def google_health_status() -> dict[str, Any]:
+    raise HTTPException(status_code=410, detail="Check ghealth-ingest logs or ghealth auth status --validate")
     pool = require_db_pool()
     connection = await db.get_source_connection(pool, google_health.SOURCE_NAME)
     if not connection:
@@ -330,6 +335,7 @@ async def google_health_status() -> dict[str, Any]:
 
 @app.post("/connectors/google-health/sync", dependencies=[Depends(require_api_key)])
 async def google_health_sync(request: GoogleHealthSyncRequest) -> dict[str, Any]:
+    raise HTTPException(status_code=410, detail="ghealth-ingest owns scheduled and backfill syncs")
     pool = require_db_pool()
     data_types = request.data_types or ([request.data_type] if request.data_type else None)
     result = await sync_google_health_data(pool, data_types=data_types, lookback_days=request.lookback_days)
@@ -505,6 +511,7 @@ def serialize_google_health_sync(records: list[dict[str, Any]], data_type: str) 
 
 @app.post("/workflows/google-health/coach-review", dependencies=[Depends(require_api_key)])
 async def google_health_coach_review(request: GoogleHealthCoachReviewRequest) -> dict[str, Any]:
+    raise HTTPException(status_code=410, detail="Use /workflows/health/coach-review; ghealth-ingest owns Google Health sync")
     pool = require_db_pool()
     if request.force_sync:
         await sync_google_health_records(pool)
@@ -623,13 +630,14 @@ async def import_health_csv(request: CsvImportRequest) -> dict[str, Any]:
 @app.post("/workflows/health/coach-review", dependencies=[Depends(require_api_key)])
 async def unified_health_coach_review(request: UnifiedHealthCoachReviewRequest) -> dict[str, Any]:
     pool = require_db_pool()
-    if request.force_sync:
-        await sync_google_health_data(pool)
-
     since = datetime.now(UTC) - timedelta(days=request.period_days)
     since_date = since.date()
+    # Google Health is synced independently by ghealth-ingest.  This request
+    # is intentionally read-only; OpenClaw never needs OAuth credentials.
     daily_summaries = await db.list_health_daily_summaries(pool, since_date)
+    daily_summaries.extend(await db.list_ghealth_daily_summaries(pool, since_date))
     sessions = await db.list_recent_health_sessions(pool, since)
+    sessions.extend(await db.list_ghealth_sessions(pool, since))
     health_summary = health_ingest.build_health_summary(daily_summaries, sessions, request.period_days)
     memories = await db.search_memories(
         pool,

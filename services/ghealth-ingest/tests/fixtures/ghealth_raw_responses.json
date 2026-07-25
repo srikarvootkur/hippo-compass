@@ -1,0 +1,7 @@
+{
+  "heart-rate": {"dataPoints": [{"name": "users/me/dataTypes/heart-rate/dataPoints/hr-1", "dataSource": {"platform": "FITBIT"}, "heartRate": {"sampleTime": {"physicalTime": "2026-07-20T12:00:00Z"}, "beatsPerMinute": 62}}]},
+  "steps": {"rollupDataPoints": [{"civilStartTime": {"date": {"year": 2026, "month": 7, "day": 20}}, "civilEndTime": {"date": {"year": 2026, "month": 7, "day": 21}}, "steps": {"countSum": "10432"}}]},
+  "sleep": {"dataPoints": [{"name": "users/me/dataTypes/sleep/dataPoints/sleep-1", "dataSource": {"platform": "FITBIT"}, "sleep": {"interval": {"startTime": "2026-07-20T03:00:00Z", "endTime": "2026-07-20T10:30:00Z"}, "type": "SLEEP", "summary": {"minutesAsleep": 420, "minutesAwake": 30, "minutesInSleepPeriod": 450}}}]},
+  "exercise": {"dataPoints": [{"name": "users/me/dataTypes/exercise/dataPoints/exercise-1", "dataSource": {"platform": "FITBIT"}, "exercise": {"interval": {"startTime": "2026-07-20T14:00:00Z", "endTime": "2026-07-20T15:00:00Z"}, "exerciseType": "RUNNING", "metricsSummary": {"caloriesKcal": 500}}}]},
+  "weight": {"dataPoints": [{"name": "users/me/dataTypes/weight/dataPoints/weight-1", "dataSource": {"platform": "FITBIT"}, "weight": {"sampleTime": {"physicalTime": "2026-07-20T12:00:00Z"}, "weightGrams": "75000"}}]}
+}

@@ -18,7 +18,7 @@ Use this skill when the user asks for a health data review, Google Health/Fitbit
 
 - `question`: natural language health coaching question.
 - `period_days`: number of days to review, default `7`.
-- `force_sync`: whether Hippo Compass should sync Google Health before reviewing, default `true`.
+- `force_sync`: accepted for backward compatibility; Google Health sync runs independently every four hours.
 
 ## Environment
 
@@ -28,7 +28,7 @@ Use this skill when the user asks for a health data review, Google Health/Fitbit
 ## Behavior
 
 1. Call `/workflows/health/coach-review`.
-2. Let Hippo Compass sync Google Health, load typed health summaries, and load memory/goals.
+2. Load the latest Postgres-backed Google Health summaries, sessions, memory, and goals.
 3. Return the summary, patterns, next actions, and citations.
 4. Clearly treat the output as wellness coaching, not medical diagnosis.
 

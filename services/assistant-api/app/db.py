@@ -439,6 +439,56 @@ async def list_health_daily_summaries(
     return results
 
 
+async def list_ghealth_daily_summaries(pool: asyncpg.Pool, since_date: Any) -> list[dict[str, Any]]:
+    """Adapt ghealth's verified SQL view to the existing coach summary shape."""
+    rows = await pool.fetch(
+        """SELECT summary_date, step_count, exercise_count, minutes_asleep,
+                  average_heart_rate_bpm, latest_weight_grams
+             FROM ghealth_daily_context
+            WHERE summary_date >= $1::date
+            ORDER BY summary_date DESC""",
+        since_date,
+    )
+    summaries: list[dict[str, Any]] = []
+    for row in rows:
+        values = dict(row)
+        day = values.pop("summary_date")
+        metrics = {key: value for key, value in values.items() if value is not None}
+        summaries.append({"source_name": "google_health", "summary_date": day, "category": "activity", "metrics": {key: metrics[key] for key in ("step_count", "exercise_count") if key in metrics}})
+        if "minutes_asleep" in metrics:
+            summaries.append({"source_name": "google_health", "summary_date": day, "category": "sleep", "metrics": {"minutes_asleep": metrics["minutes_asleep"]}})
+        heart = {key: metrics[key] for key in ("average_heart_rate_bpm",) if key in metrics}
+        if heart:
+            summaries.append({"source_name": "google_health", "summary_date": day, "category": "heart", "metrics": heart})
+        if "latest_weight_grams" in metrics:
+            summaries.append({"source_name": "google_health", "summary_date": day, "category": "body", "metrics": {"weight_grams": metrics["latest_weight_grams"]}})
+    return summaries
+
+
+async def list_ghealth_sessions(pool: asyncpg.Pool, since: Any) -> list[dict[str, Any]]:
+    rows = await pool.fetch(
+        """SELECT external_id, start_time, end_time, source, exercise_type, title, metrics
+             FROM ghealth_exercise_sessions
+            WHERE start_time >= $1::timestamptz
+            ORDER BY start_time DESC""",
+        since,
+    )
+    return [
+        {
+            "source_name": "google_health",
+            "data_type": "exercise",
+            "external_id": row["external_id"],
+            "category": "activity",
+            "session_type": row["exercise_type"],
+            "title": row["title"],
+            "start_time": row["start_time"],
+            "end_time": row["end_time"],
+            "metrics": ensure_dict(row["metrics"]),
+        }
+        for row in rows
+    ]
+
+
 async def list_recent_health_sessions(
     pool: asyncpg.Pool,
     since: Any,

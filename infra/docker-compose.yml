@@ -48,6 +48,43 @@ services:
       - assistant-api
     restart: unless-stopped
 
+  # Owns the only writable Google Health credential mount.  Enable after the
+  # one-time readonly OAuth login has completed (see docs/ghealth-ingestion.md).
+  ghealth-ingest:
+    build:
+      context: ../services/ghealth-ingest
+      args:
+        GHEALTH_GIT_REF: ${GHEALTH_GIT_REF:-9cf02743d9ca051500b7c1c181eb88a9ae8988a5}
+    env_file:
+      - ../.env
+    environment:
+      GHEALTH_CONFIG_DIR: /run/ghealth
+      GHEALTH_TIMEZONE: America/New_York
+      TZ: America/New_York
+      GHEALTH_BACKFILL_DAYS: ${GHEALTH_BACKFILL_DAYS:-90}
+      GHEALTH_BACKFILL_WINDOW_DAYS: ${GHEALTH_BACKFILL_WINDOW_DAYS:-7}
+      GHEALTH_OVERLAP_HOURS: ${GHEALTH_OVERLAP_HOURS:-24}
+      GHEALTH_SYNC_INTERVAL_SECONDS: ${GHEALTH_SYNC_INTERVAL_SECONDS:-14400}
+    volumes:
+      - ${GHEALTH_CONFIG_HOST_PATH:?Set GHEALTH_CONFIG_HOST_PATH to a root-owned secret directory}:/run/ghealth:rw
+    profiles:
+      - ghealth
+    restart: unless-stopped
+
+  # Existing databases do not execute docker-entrypoint-initdb.d again.
+  # Run explicitly after deployment: docker compose --profile migrations run --rm db-migrate
+  db-migrate:
+    image: postgres:16-alpine
+    env_file:
+      - ../.env
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-assistant}
+    volumes:
+      - ../db/migrations:/migrations:ro
+    command: ["sh", "-ec", "psql \"$${DATABASE_URL}\" -v ON_ERROR_STOP=1 -f /migrations/004_ghealth_ingestion.sql"]
+    profiles:
+      - migrations
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -88,7 +125,12 @@ services:
     restart: unless-stopped
 
   openclaw:
-    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    image: ${OPENCLAW_RUNTIME_IMAGE:-hippo-openclaw:ghealth}
+    build:
+      context: ../services/openclaw-runtime
+      args:
+        OPENCLAW_IMAGE: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+        GHEALTH_GIT_REF: ${GHEALTH_GIT_REF:-9cf02743d9ca051500b7c1c181eb88a9ae8988a5}
     env_file:
       - ../.env
     ports:

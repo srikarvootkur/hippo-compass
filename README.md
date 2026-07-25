@@ -32,7 +32,7 @@ The assistant can use OpenAI, OpenClaw, Claude, Gemini, Codex, or something else
 - **Docker Compose** for deployment.
 - **Redis** for background jobs and queues.
 - **Caddy** for HTTPS.
-- **Google Health API connector** for read-only Fitbit-backed activity/fitness imports.
+- **`ghealth` ingestion service** for read-only Fitbit-backed activity/fitness imports.
 - **Health Data Layer** for Google/Fitbit, Hevy CSV, Cronometer CSV, typed health facts, and LLM-ready daily summaries.
 
 ## Repo Layout

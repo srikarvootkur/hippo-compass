@@ -46,6 +46,14 @@ def test_summarize_exercise_records_aggregates_google_health_payloads() -> None:
 
 @pytest.mark.asyncio
 async def test_google_health_coach_endpoint_persists_workflow_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The legacy direct connector must never make a Google API request."""
+    with pytest.raises(main.HTTPException) as exc:
+        await main.google_health_coach_review(
+            main.GoogleHealthCoachReviewRequest(question="Review my week.", period_days=7)
+        )
+    assert exc.value.status_code == 410
+    return
+
     main.app.state.db_pool = object()
 
     async def fake_sync(pool):
@@ -140,6 +148,13 @@ async def test_unified_health_coach_uses_date_for_daily_summary_query(monkeypatc
     async def fake_list_recent_health_sessions(pool, since, limit=200):
         return []
 
+    async def fake_list_ghealth_daily_summaries(pool, since_date):
+        assert isinstance(since_date, date)
+        return []
+
+    async def fake_list_ghealth_sessions(pool, since):
+        return []
+
     async def fake_search_memories(pool, query, limit, filters):
         return []
 
@@ -190,6 +205,8 @@ async def test_unified_health_coach_uses_date_for_daily_summary_query(monkeypatc
 
     monkeypatch.setattr(main.db, "list_health_daily_summaries", fake_list_health_daily_summaries)
     monkeypatch.setattr(main.db, "list_recent_health_sessions", fake_list_recent_health_sessions)
+    monkeypatch.setattr(main.db, "list_ghealth_daily_summaries", fake_list_ghealth_daily_summaries)
+    monkeypatch.setattr(main.db, "list_ghealth_sessions", fake_list_ghealth_sessions)
     monkeypatch.setattr(main.db, "search_memories", fake_search_memories)
     monkeypatch.setattr(main.db, "list_active_goals", fake_list_active_goals)
     monkeypatch.setattr(main.db, "insert_recommendation", fake_insert_recommendation)
