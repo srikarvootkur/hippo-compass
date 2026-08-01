@@ -143,6 +143,10 @@ async def schema_preflight(pool: asyncpg.Pool) -> None:
 
 
 def assert_readonly_auth() -> None:
+    # `auth status --validate` only validates the stored access token; it does
+    # not refresh it. Refresh first so long-running scheduled jobs survive the
+    # one-hour Google access-token lifetime using their stored refresh token.
+    command("auth", "refresh")
     status = command("auth", "status", "--validate")
     serialized = json.dumps(status).lower()
     if "cloud-platform" in serialized:

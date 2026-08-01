@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.schema import INITIAL_TYPES, expected_rows_key
 from app import worker
-from app.worker import civil_date, parse_integer, point_coordinates, point_identity, source_of
+from app.worker import assert_readonly_auth, civil_date, parse_integer, point_coordinates, point_identity, source_of
 
 
 FIXTURES = json.loads((Path(__file__).parent / "fixtures" / "ghealth_raw_responses.json").read_text())
@@ -51,3 +51,17 @@ def test_parse_integer_handles_google_string_numbers_and_missing_values() -> Non
     assert parse_integer(433) == 433
     assert parse_integer(None) is None
     assert parse_integer("") is None
+
+
+def test_auth_preflight_refreshes_before_validating(monkeypatch) -> None:
+    commands = []
+
+    def fake_command(*args, **kwargs):
+        commands.append(args)
+        if args == ("auth", "status", "--validate"):
+            return {"authenticated": True, "scope": "googlehealth.sleep.readonly"}
+        return {"status": "refreshed"}
+
+    monkeypatch.setattr(worker, "command", fake_command)
+    assert_readonly_auth()
+    assert commands == [("auth", "refresh"), ("auth", "status", "--validate")]
