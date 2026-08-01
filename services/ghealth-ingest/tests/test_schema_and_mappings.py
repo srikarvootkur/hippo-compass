@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.schema import INITIAL_TYPES, expected_rows_key
 from app import worker
-from app.worker import civil_date, point_coordinates, point_identity, source_of
+from app.worker import civil_date, parse_integer, point_coordinates, point_identity, source_of
 
 
 FIXTURES = json.loads((Path(__file__).parent / "fixtures" / "ghealth_raw_responses.json").read_text())
@@ -44,3 +44,10 @@ def test_null_data_points_is_a_valid_zero_row_page(monkeypatch) -> None:
     monkeypatch.setattr(worker, "command", lambda *args, **kwargs: {"dataPoints": None})
     response = worker.fetch_page("sleep", "list", worker.date(2026, 5, 24), worker.date(2026, 5, 30), None)
     assert response == {"dataPoints": []}
+
+
+def test_parse_integer_handles_google_string_numbers_and_missing_values() -> None:
+    assert parse_integer("433") == 433
+    assert parse_integer(433) == 433
+    assert parse_integer(None) is None
+    assert parse_integer("") is None

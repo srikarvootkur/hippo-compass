@@ -79,6 +79,15 @@ def civil_date(value: Any) -> date | None:
         return None
 
 
+def parse_integer(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def source_of(point: dict[str, Any]) -> str:
     data_source = point.get("dataSource") or {}
     device = data_source.get("device") or {}
@@ -214,7 +223,8 @@ async def project_typed_point(pool: asyncpg.Pool, raw_id: int, data_type: str, e
           start_time=excluded.start_time,end_time=excluded.end_time,minutes_asleep=excluded.minutes_asleep,
           minutes_awake=excluded.minutes_awake,total_minutes=excluded.total_minutes,source=excluded.source,
           sleep_type=excluded.sleep_type,raw_point_id=excluded.raw_point_id""", external_id, start, end,
-          summary.get("minutesAsleep"), summary.get("minutesAwake"), summary.get("minutesInSleepPeriod"), source,
+          parse_integer(summary.get("minutesAsleep")), parse_integer(summary.get("minutesAwake")),
+          parse_integer(summary.get("minutesInSleepPeriod")), source,
           nested(point, "sleep", "type"), raw_id)
     elif data_type == "exercise":
         start, end = parse_time(nested(point, "exercise", "interval", "startTime")), parse_time(nested(point, "exercise", "interval", "endTime"))
@@ -299,10 +309,13 @@ async def run_once() -> None:
 
 async def main() -> None:
     while True:
+        print(json.dumps({"event": "ghealth_sync_started", "time": datetime.now(UTC).isoformat()}), flush=True)
         try:
             await run_once()
+            print(json.dumps({"event": "ghealth_sync_completed", "time": datetime.now(UTC).isoformat()}), flush=True)
         except Exception as exc:
             print(json.dumps({"event": "ghealth_ingest_unavailable", "error": str(exc)[:300]}), flush=True)
+        print(json.dumps({"event": "ghealth_next_sync_scheduled", "after_seconds": SYNC_INTERVAL_SECONDS}), flush=True)
         await asyncio.sleep(SYNC_INTERVAL_SECONDS)
 
 
